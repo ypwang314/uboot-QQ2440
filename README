@@ -1,3 +1,7 @@
+修改文件vim arch/arm/include/asm/mach-types.h 
+#define MACH_TYPE_SMDK2440             198
+Need Confimed.
+
 #
 # (C) Copyright 2000 - 2013
 # Wolfgang Denk, DENX Software Engineering, wd@denx.de.
