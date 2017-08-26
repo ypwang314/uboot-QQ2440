@@ -1,6 +1,6 @@
-SMDK2410 BOARD
-M:	David Müller <d.mueller@elsoft.ch>
+QQ2440 BOARD
+M:	Wang Yanpu <ypwang314@163.com>
 S:	Maintained
-F:	board/samsung/smdk2410/
-F:	include/configs/smdk2410.h
-F:	configs/smdk2410_defconfig
+F:	board/samsung/QQ2440/
+F:	include/configs/QQ2440.h
+F:	configs/QQ2440_defconfig
