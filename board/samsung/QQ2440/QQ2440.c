@@ -61,7 +61,7 @@ int board_early_init_f(void)
 	writel(0xFFFFFF, &clk_power->locktime);
 
 	/* configure MPLL */
-	//writel((M_MDIV << 12) + (M_PDIV << 4) + M_SDIV,
+	writel((M_MDIV << 12) + (M_PDIV << 4) + M_SDIV,
 	       &clk_power->mpllcon);
 
 	/* some delay between MPLL and UPLL */
