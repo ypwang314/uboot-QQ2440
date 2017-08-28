@@ -1,5 +1,6 @@
 修改文件vim arch/arm/include/asm/mach-types.h 
 #define MACH_TYPE_SMDK2440             198
+#define MACH_TYPE_QQ2440                1999
 Need Confimed.
 
 #

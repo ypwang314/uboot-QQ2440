@@ -58,11 +58,11 @@ int board_early_init_f(void)
 	struct s3c24x0_gpio * const gpio = s3c24x0_get_base_gpio();
 
 	/* to reduce PLL lock time, adjust the LOCKTIME register */
-	//writel(0xFFFFFF, &clk_power->locktime);
+	writel(0xFFFFFF, &clk_power->locktime);
 
 	/* configure MPLL */
 	//writel((M_MDIV << 12) + (M_PDIV << 4) + M_SDIV,
-	//       &clk_power->mpllcon);
+	       &clk_power->mpllcon);
 
 	/* some delay between MPLL and UPLL */
 	pll_delay(4000);
@@ -96,8 +96,8 @@ int board_early_init_f(void)
 
 int board_init(void)
 {
-	/* arch number of SMDK2410-Board */
-	gd->bd->bi_arch_number = MACH_TYPE_SMDK2410;
+	/* arch number of QQ2440-Board */
+	gd->bd->bi_arch_number = MACH_TYPE_QQ2440;
 
 	/* adress of boot parameters */
 	gd->bd->bi_boot_params = 0x30000100;
@@ -128,7 +128,7 @@ int board_eth_init(bd_t *bis)
 
 /*
  * Hardcoded flash setup:
- * Flash 0 is a non-CFI AMD AM29LV800BB flash.
+ * Flash 0 is a non-CFI AMD AM29LV160BB flash.
  */
 ulong board_flash_get_legacy(ulong base, int banknum, flash_info_t *info)
 {

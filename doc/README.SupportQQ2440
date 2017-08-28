@@ -1,0 +1,2335 @@
+u-boot-2010.12移植到2440
+
+进入相应路径： cd /home/bsc
+
+解压缩： tar jxvf u-boot-2010.12.tar.bz2 
+
+进入生成的文件夹，在uboot主目录： cd u-boot-2010.12
+
+首先编译下看看是否可以编译成功（交叉编译器为4.3.2）：
+
+make distclean              /*清除已经形成的链接，修改顶层Makefile文件必须执行*/
+
+make smdk2410_config
+
+[root@localhost u-boot-2010.12]# make smdk2410_config
+
+awk '(NF && $1 !~ /^#/) { print $1 ": " $1 "_config; $(MAKE)" }' boards.cfg > .boards.depend
+
+Configuring for smdk2410 board...
+
+ [root@localhost u-boot-2010.12]# make smdk2410_config
+
+Generating include/autoconf.mk
+
+Generating include/autoconf.mk.dep
+
+Configuring for smdk2410 board...
+
+[root@localhost u-boot-2010.12]#
+
+然后make all
+
+make测试一下，产生如下错误
+
+board.c: In function '__dram_init_banksize':
+
+board.c:233: error: 'CONFIG_SYS_SDRAM_BASE' undeclared (first use in this function)
+
+board.c:233: error: (Each undeclared identifier is reported only once
+
+board.c:233: error: for each function it appears in.) board.c: In function 'board_init_f':
+
+board.c:279: error: 'CONFIG_SYS_INIT_SP_ADDR' undeclared (first use in this function)
+
+board.c:312: error: 'CONFIG_SYS_SDRAM_BASE' undeclared (first use in this function)
+
+make[1]: *** [board.o] Error 1
+
+make[1]: Leaving directory `/home/bsc/u-boot-2010.12/arch/arm/lib'
+
+make: *** [arch/arm/lib/libarm.o] Error 2
+
+宏未定义，可能是新版uboot的bug
+
+在smdk2410.h中添加
+
+#define CONFIG_SYS_SDRAM_BASE             0x00000000
+
+#define CONFIG_SYS_INIT_SP_ADDR              (CONFIG_SYS_TEXT_BASE - GENERATED_GBL_DATA_SIZE)
+
+修改完毕再次编译出现如下错误：
+
+arch/arm/lib/libarm.o: In function `arch_lmb_reserve':
+
+/home/bsc/u-boot-2010.12/arch/arm/lib/bootm.c:74: undefined reference to `get_sp'
+
+arm-linux-ld: BFD (Sourcery G++ Lite 2008q3-72) 2.18.50.20080215 assertion fail /scratch/julian/lite-respin/linux/obj/binutils-src-2008q3-72-arm-none-linux-gnueabi-i686-pc-linux-gnu/bfd/elf32-arm.c:9537
+
+arm-linux-ld: BFD (Sourcery G++ Lite 2008q3-72) 2.18.50.20080215 assertion fail /scratch/julian/lite-respin/linux/obj/binutils-src-2008q3-72-arm-none-linux-gnueabi-i686-pc-linux-gnu/bfd/elf32-arm.c:9771
+
+/bin/sh: line 1: 27564 Segmentation fault      arm-linux-ld -Bstatic -T u-boot.lds -pie -Ttext 0x33F80000 $UNDEF_SYM arch/arm/cpu/arm920t/start.o --start-group api/libapi.o arch/arm/cpu/arm920t/libarm920t.o arch/arm/cpu/arm920t/s3c24x0/libs3c24x0.o arch/arm/lib/libarm.o common/libcommon.o disk/libdisk.o drivers/bios_emulator/libatibiosemu.o drivers/block/libblock.o drivers/dma/libdma.o drivers/fpga/libfpga.o drivers/gpio/libgpio.o drivers/hwmon/libhwmon.o drivers/i2c/libi2c.o drivers/input/libinput.o drivers/misc/libmisc.o drivers/mmc/libmmc.o drivers/mtd/libmtd.o drivers/mtd/nand/libnand.o drivers/mtd/onenand/libonenand.o drivers/mtd/spi/libspi_flash.o drivers/mtd/ubi/libubi.o drivers/net/libnet.o drivers/net/phy/libphy.o drivers/pci/libpci.o drivers/pcmcia/libpcmcia.o drivers/power/libpower.o drivers/rtc/librtc.o drivers/serial/libserial.o drivers/spi/libspi.o drivers/twserial/libtws.o drivers/usb/gadget/libusb_gadget.o drivers/usb/host/libusb_host.o drivers/usb/musb/libusb_musb.o drivers/usb/phy/libusb_phy.o drivers/video/libvideo.o drivers/watchdog/libwatchdog.o fs/cramfs/libcramfs.o fs/ext2/libext2fs.o fs/fat/libfat.o fs/fdos/libfdos.o fs/jffs2/libjffs2.o fs/reiserfs/libreiserfs.o fs/ubifs/libubifs.o fs/yaffs2/libyaffs2.o lib/libfdt/libfdt.o lib/libgeneric.o lib/lzma/liblzma.o lib/lzo/liblzo.o net/libnet.o post/libpost.o board/samsung/smdk2410/libsmdk2410.o --end-group /home/bsc/u-boot-2010.12/arch/arm/lib/eabi_compat.o -L /usr/local/arm/4.3.2/bin/../lib/gcc/arm-none-linux-gnueabi/4.3.2/armv4t -lgcc -Map u-boot.map -o u-boot
+
+make: *** [u-boot] Error 139
+
+查看bootm.c:代码，发现里面明明存在get_sp（）函数，支持在一些宏定义条件下。可能是这些宏未定义导致该函数未编译。查到网上一个patch：
+
+[PATCH] arm: get_sp() should always be compiled
+
+<ratbert.chuang <at> gmail.com> 2010-11-01 07:55:27 GMT
+
+From: Po-Yu Chuang <ratbert <at> faraday-tech.com>
+
+get_sp() was incorrectly excluded if none of
+
+  CONFIG_SETUP_MEMORY_TAGS
+
+  CONFIG_CMDLINE_TAG
+
+  CONFIG_INITRD_TAG
+
+  CONFIG_SERIAL_TAG
+
+  CONFIG_REVISION_TAG
+
+were defined.
+
+ 
+
+Signed-off-by: Po-Yu Chuang <ratbert <at> faraday-tech.com>
+
+---
+
+ arch/arm/lib/bootm.c |    4 +---
+
+ 1 files changed, 1 insertions(+), 3 deletions(-)
+
+ 
+
+diff --git a/arch/arm/lib/bootm.c b/arch/arm/lib/bootm.c
+
+index a1649ee..7734953 100644
+
+--- a/arch/arm/lib/bootm.c
+
++++ b/arch/arm/lib/bootm.c
+
+@@ -327,12 +327,12 @@ void setup_revision_tag(struct tag **in_params)
+
+ }
+
+ #endif  /* CONFIG_REVISION_TAG */
+
+ 
+
+-
+
+ static void setup_end_tag (bd_t *bd)
+
+ {
+
+        params->hdr.tag = ATAG_NONE;
+
+        params->hdr.size = 0;
+
+ }
+
++#endif /* CONFIG_SETUP_MEMORY_TAGS || CONFIG_CMDLINE_TAG || CONFIG_INITRD_TAG */
+
+ 
+
+ static ulong get_sp(void)
+
+ {
+
+@@ -341,5 +341,3 @@ static ulong get_sp(void)
+
+        asm("mov %0, sp" : "=r"(ret) : );
+
+        return ret;
+
+ }
+
+-
+
+-#endif /* CONFIG_SETUP_MEMORY_TAGS || CONFIG_CMDLINE_TAG || CONFIG_INITRD_TAG */
+
+修改完毕后，再次编译通过（从编译过程来看，新版本的BUG还不少）。
+
+ 
+
+ 
+
+Smdk2410可以编译通过之后，即可进入2440的移植了。2440和2410的资源差不多，主频和外设有点差别，所以我们就在board/samsung/下以smdk2410为模板建立自己目标板的项目，取名叫smdk2440。（代码中的修改用红色表示）
+一、首先建立目标板文件
+
+#cp -rf smdk2410/* smdk2440/   //将2410下所有的代码复制到2440下
+
+#cd smdk2440        //进入smdk2440目录
+
+#mv smdk2410.c smdk2440.c  //将smdk2440下的smdk2410.c改名为smdk2440.c
+
+#cd ../../../         //回到u-boot根目录 #cp include/configs/smdk2410.h include/configs/smdk2440.h //建立2440头文件 #gedit board/samsung/smdk2440/Makefile   
+
+修改smdk2440下Makefile的编译项，如下：
+
+COBJS    := smdk2440.o flash.o  //因在smdk2440下我们将smdk2410.c改名为smdk2440.c
+
+老版本的uboot是需要修改顶层makefile文件
+
+在其中加入：
+
+smdk2440_config    :    unconfig     //2440编译选项格式     @$(MKCONFIG) $(@:_config=) arm arm920t smdk2440 samsung s3c24x0
+
+但是新版本的文件组织结构有很大变化，需要在boards.cfg文件中smdk2410的下面增加类似的一条：
+
+smdk2440       arm         arm920t     -          samsung        s3c24x0
+
+然后，测试下编译情况：
+
+Make distclean
+
+Make smdk2440_ config
+
+Make all
+
+不幸，出现如下错误：
+
+ 
+
+board.c: In function 'board_init_f':
+
+board.c:279: error: 'CONFIG_SYS_TEXT_BASE' undeclared (first use in this function)
+
+board.c:279: error: (Each undeclared identifier is reported only once
+
+board.c:279: error: for each function it appears in.)
+
+make[1]: *** [board.o] 错误 1
+
+make[1]: 离开目录“/home/bsc/samba/u-boot-2010.12/arch/arm/lib”
+
+make: *** [arch/arm/lib/libarm.o] 错误 2
+
+ 
+
+这说明我们前面为了编译通过而增加的宏定义可能是有问题的，事实上我们可以在网上查到一个patch，可以解决这些问题。但是这里，为了深入了解问题所在，我们手动一点点来修改而不是直接打上patch。
+
+include/configs/smdk2410.h include/configs/smdk2440.h 文件中删除上面添加的宏定义：
+
+#define CONFIG_SYS_SDRAM_BASE             0x00000000 #define CONFIG_SYS_INIT_SP_ADDR              (CONFIG_SYS_TEXT_BASE - GENERATED_GBL_DATA_SIZE)
+
+添加如下宏定义（参考该patch）
+
+#define CONFIG_SYS_SDRAM_BASE      PHYS_SDRAM_1
+
+#define CONFIG_SYS_INIT_SP_ADDR    (CONFIG_SYS_SDRAM_BASE + 0x1000 -   GENERATED_GBL_DATA_SIZE)
+
+然后再次编译，此次编译可以通过 至此我们建立起了目标板的框架，我们可以开始修改代码以适应我们的目标板。
+
+二、目标板u-boot的硬件设备初始化。
+
+（1）入口代码分析
+
+一般在嵌入式系统软件开发中，在所有源码文件编译完成之后，链接器要读取一个链接分配文件，在该文件中定义了程序的入口 点，代码段、数据段等分配情况等。那么我们的2440开发板u-boot的这个链接文件就是cpu/arm920t/u-boot.lds，打开该文件部分代码如下：
+
+OUTPUT_FORMAT("elf32-littlearm", "elf32-littlearm", "elf32-littlearm") OUTPUT_ARCH(arm)    //定义生成文件的目标平台是arm ENTRY(_start)       //定义程序的入口点是_start
+SECTIONS {     //其他一些代码段、数据段等分配     . = 0x00000000;
+    . = ALIGN(4);     .text :     {         cpu/arm920t/start.o    (.text)         *(.text)     }     ..................     .................. }
+
+知道了程序的入口点是_start，那么我们就打开2440开发板u-boot第一个要运行的程序cpu/arm920t/start.S，查找到_start的位置如下：
+
+.globl _start _start: b       start_code    //将程序的执行跳转到start_code处
+
+从这个汇编代码可以看到程序又跳转到start_code处开始执行，那么再查找到start_code处的代码如下：
+
+/*  * the actual start code  */
+start_code:     /*      * set the cpu to SVC32 mode      */     mrs    r0,cpsr     bic    r0,r0,#0x1f     orr    r0,r0,#0xd3     msr    cpsr,r0
+    bl coloured_LED_init  //此处两行是对AT91RM9200DK开发板上的LED进行初始化的     bl red_LED_on
+
+由此可以看到，start_code处才是u-boot启动代码的真正开始处。
+
+（2）初始化代码修改
+
+start.S中注释掉LED相关代码：
+
+/*bl coloured_LED_init  //这两行是AT91RM9200DK开发板的LED初始化，注释掉     bl red_LED_on*/
+
+       /*注释掉以下两行代码以便在内存中调试
+
+#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+
+       bl    cpu_init_crit
+
+#endif
+
+*/
+
+或者在在include/configs/smdk2440.h头文件中添加CONFIG_S3C2440宏
+
+#define CONFIG_SKIP_LOWLEVEL_INIT
+
+在include/configs/smdk2440.h头文件中添加CONFIG_S3C2440宏
+
+#define CONFIG_ARM920T        1    /* This is an ARM920T Core     */ /*#define CONFIG_S3C2410        1   */ /* in a SAMSUNG S3C2410 SoC    */需要注销此宏 /*#define CONFIG_SMDK2410     1   */ /* on a SAMSUNG SMDK2410 Board */需要注销此宏 #define CONFIG_S3C2440        1    /* in a SAMSUNG S3C2440 SoC    */添加此宏
+
+#define CONFIG_SYS_CLK_FREQ    16934400/* the SMDK2440 has 16MHz input clock  by bsc */
+
+ 
+
+在u-boot中添加对S3C2440一些寄存器的支持、添加中断禁止部分和时钟设置部分。 由于2410和2440的寄存器及地址大部分是一致的，所以这里就直接在2410的基础上再加上对2440的支持即可，cpu/arm920t/start.S代码如下：
+
+#ifdef CONFIG_S3C24X0
+
+       /* turn off the watchdog */
+
+# if defined(CONFIG_S3C2400)
+
+#  define pWTCON      0x15300000
+
+#  define INTMSK       0x14400008    /* Interupt-Controller base addresses */
+
+#  define CLKDIVN     0x14800014    /* clock divisor register */
+
+#else
+
+#  define pWTCON      0x53000000
+
+#  define INTMSK       0x4A000008   /* Interupt-Controller base addresses */
+
+#  define INTSUBMSK       0x4A00001C
+
+#  define CLKDIVN     0x4C000014   /* clock divisor register */
+
+# endif
+
+ 
+
+       ldr   r0, =pWTCON
+
+       mov r1, #0x0
+
+       str    r1, [r0]
+
+ 
+
+       /*
+
+        * mask all IRQs by setting all bits in the INTMR - default
+
+        */
+
+       mov r1, #0xffffffff
+
+       ldr   r0, =INTMSK
+
+       str    r1, [r0]
+
+# if defined(CONFIG_S3C2410)
+
+       ldr   r1, =0x3ff
+
+       ldr   r0, =INTSUBMSK
+
+       str    r1, [r0]
+
+# endif
+
+# if defined(CONFIG_S3C2440)
+
+       ldr   r1, =0x7fff
+
+       ldr   r0, =INTSUBMSK
+
+       str    r1, [r0]
+
+# endif
+
+ 
+
+# if defined(CONFIG_S3C2440)   //添加s3c2440的时钟部分
+
+ 
+
+#define MPLLCON   0x4C000004   //系统主频配置寄存器基地址
+
+#define UPLLCON   0x4C000008   //USB时钟频率配置寄存器基地址
+
+#define CAMDIVN      0x4C000018
+
+ 
+
+       ldr  r0,  = CAMDIVN
+
+       mov  r1,  #0
+
+       str  r1,  [r0]
+
+        
+
+           ldr  r0, = CLKDIVN          //设置分频系数FCLK:HCLK:PCLK = 1:3:6
+
+           ldr  r1,  = 0x7
+
+           str  r1, [r0]
+
+ 
+
+       ldr  r0, =MPLLCON  //设置系统主频为405MHz
+
+       ldr  r1, =0x6e031  //这个值参考芯片手册“PLL VALUE SELECTION TABLE”部分
+
+       str  r1, [r0]
+
+      
+
+       ldr  r0, =UPLLCON  //设置USB时钟频率为48MHz
+
+       ldr  r1, =0x3c042  //这个值参考芯片手册“PLL VALUE SELECTION TABLE”部分
+
+       str  r1, [r0]
+
+# else //其他开发板的时钟部分，这里就不用管了，我们现在是做2440的
+
+       /* FCLK:HCLK:PCLK = 1:2:4 */
+
+       /* default FCLK is 120 MHz ! */
+
+       ldr   r0, =CLKDIVN
+
+       mov r1, #3
+
+       str    r1, [r0]
+
+#endif     /* CONFIG_S3C2440 */
+
+#endif     /* CONFIG_S3C24X0 */
+
+ 
+
+S3C2440的时钟部分除了在start.S中添加外，还要在board/samsung/smdk2440/smdk2440.c修改或添加部分代码，如下：
+
+#define FCLK_SPEED 2       //设置默认等于2，by bsc 2010-2-22 20:49
+
+#if FCLK_SPEED==0          /* Fout = 203MHz, Fin = 12MHz for Audio */
+
+#define M_MDIV    0xC3
+
+#define M_PDIV    0x4
+
+#define M_SDIV    0x1
+
+#elif FCLK_SPEED==1        /* Fout = 202.8MHz */
+
+#define M_MDIV    0xA1
+
+#define M_PDIV    0x3
+
+#define M_SDIV    0x1
+
+#elif FCLK_SPEED==2        /* Fout = 405MHz */
+
+#define M_MDIV    0x6e     //这三个值根据S3C2440芯片手册“PLL VALUE SELECTION TABLE”部分进行设置
+
+#define M_PDIV    0x3
+
+#define M_SDIV    0x1
+
+#endif
+
+ 
+
+#define USB_CLOCK 2        //设置默认等于2，即下面红色代码部分有效
+
+ 
+
+#if USB_CLOCK==0
+
+#define U_M_MDIV    0xA1
+
+#define U_M_PDIV    0x3
+
+#define U_M_SDIV    0x1
+
+#elif USB_CLOCK==1
+
+#define U_M_MDIV    0x48
+
+#define U_M_PDIV    0x3
+
+#define U_M_SDIV    0x2
+
+#elif USB_CLOCK==2         /* Fout = 48MHz */
+
+#define U_M_MDIV    0x3c   //这三个值根据S3C2440芯片手册“PLL VALUE SELECTION TABLE”部分进行设置
+
+#define U_M_PDIV    0x4
+
+#define U_M_SDIV    0x2
+
+#endif
+
+ 
+
+修改/* arch number of SMDK2440-Board */
+
+       gd->bd->bi_arch_number = MACH_TYPE_SMDK2440;
+
+在dram_init（void）函数中添加gd->ram_size初始化（此句比较重要）：
+
+gd->ram_size = PHYS_SDRAM_1_SIZE; /*add by bsc 2011/2/21 20:14:46*/
+
+修改board/samsung/smdk2440/config.mk
+
+CONFIG_SYS_TEXT_BASE = 0x33000000/*0x3f800000改为0x33000000 以便内存中调试*/
+
+修改完毕后我们再重新编译u-boot，然后再下载到RAM中运行测试。tftp 0x33000000 u-boot.bin 
+
+go 0x33000000
+
+结果终端有输出信息并且出现类似Shell的命令行，这说明这一部分移植完成。如果有其他问题可以在include/configs/smdk2440.h头文件中添加DEBUG宏用于调试。
+
+ 
+
+在这一篇中，我们让开发板实现对DM9000X网卡的支持，后续的移植及调试均依赖网络的支持。
+
+u- boot的新版本已经对CS8900和DM9000X网卡有比较完善的代码支持(代码在drivers/net/目录下)，而且在 S3C24XX系列中默认对CS8900网卡进行配置使用。只是在个别地方要根据开发板的具体网卡片选进行设置，就可以对S3C24XX系列中 CS8900网卡的支持使用。
+
+由于我们的目标板采用的是dm9000网卡，我们通过drivers/net/目录下有关DM9000的代码，发现dm9000x.h中对CONFIG_DRIVER_DM9000宏的依 赖，dm9000x.c中对CONFIG_DM9000_BASE宏、DM9000_IO宏、DM9000_DATA等宏的依赖，所以我们修改代码如下：
+
+#define CONFIG_NET_MULTI        1
+
+/* * Hardware drivers */  屏蔽掉u-boot默认对CS8900网卡的支持 //#define CONFIG_DRIVER_CS8900 1 /* we have a CS8900 on-board */ //#define CS8900_BASE          0x19000300 //#define CS8900_BUS16         1 /* the Linux driver does accesses as shorts */
+
+//添加u-boot对DM9000X网卡的支持
+
+#define CONFIG_CMD_NET
+
+#define CONFIG_DRIVER_DM9000    1   #define CONFIG_DM9000_NO_SROM   1 #define CONFIG_DM9000_BASE      0x18400300//网卡片选地址,需要根据具体目标板修改 #define DM9000_IO               CONFIG_DM9000_BASE #define DM9000_DATA             (CONFIG_DM9000_BASE + 4)   //网卡数据地址
+
+//给u-boot加上ping命令，用来测试网络通不通
+
+#define CONFIG_CMD_PING 
+
+ 
+
+//恢复被注释掉的网卡MAC地址和修改你合适的开发板IP地址
+
+#define CONFIG_ETHADDR   08:00:3e:26:0a:5b  //开发板MAC地址 #define CONFIG_NETMASK   255.255.255.0 #define CONFIG_IPADDR    192.168.0.110      //开发板IP地址
+
+#define CONFIG_SERVERIP  192.168.0.7      //Linux主机IP地址
+
+board/samsung/smdk2440/smdk2440.c 添加板载DM9000网卡初始化代码，如下：
+
+#include <net.h> #include <netdev.h>
+
+#ifdef CONFIG_CMD_NET
+
+int board_eth_init(bd_t *bis)
+
+{
+
+    int rc = 0;
+
+#ifdef CONFIG_CS8900
+
+    cs8900_initialize(0, CONFIG_CS8900_BASE);
+
+#endif
+
+ 
+
+#ifdef CONFIG_DRIVER_DM9000
+
+    rc = dm9000_initialize(bis);
+
+#endif
+
+    return rc;
+
+}
+
+#endif
+
+编译之后加载到内存运行，可以ping通，但是串口出现大量“raise:signal # 8 caught”.找到打印该语句的地方， arch\arm\lib\eabi_compat.c，
+
+int raise (int signum)
+
+{
+
+    /*printf("raise: Signal # %d caught\n", signum);*/
+
+    return 0;
+
+}
+
+直接删除掉该打印（比较简单粗暴，但是验证证实确实可以的，目前未发现什么问题。）
+
+然后下载运行ping命令，发现不通,出现“could not establish link”的错误，参考网友的处理方法：修改drivers/net/dm9000x.c
+
+#if 0  //屏蔽掉dm9000_init函数中的这一部分，不然使用网卡的时候会报“could not establish link”的错误     i = 0;     while (!(phy_read(1) & 0x20)) {    /* autonegation complete bit */         udelay(1000);         i++;         if (i == 10000) {             printf("could not establish link ");             return 0;         }     } #endif
+
+/*   Stop the interface.   The interface is stopped when it is brought. *///屏蔽掉dm9000_halt函数中的内容 static void dm9000_halt(struct eth_device *netdev)
+
+{
+
+#if 0
+
+      DM9000_DBG("%s\n", __func__);
+
+      /* RESET devie */
+
+      phy_write(0, 0x8000);      /* PHY RESET */
+
+      DM9000_iow(DM9000_GPR, 0x01);   /* Power-Down PHY */
+
+      DM9000_iow(DM9000_IMR, 0x80);   /* Disable all interrupt */
+
+      DM9000_iow(DM9000_RCR, 0x00);  /* Disable RX */
+
+#endif
+
+}
+
+然后再次完全重新编译，测试ping和tftp命令，均正常，至此dm9000的驱动移植完成可以正常工作。至于“raise:signal # 8 caught”的错误，后续可以再仔细研究，目前怀疑是新版本的BUG。
+
+ 
+
+在这篇中，我们将移植nand flash部分，支持NAND启动及NAND FLASH的读写访问。
+
+首先，我们在u-boot-2010.12\include\configs\smdk2440.h中注销如下定义。
+
+//#define  CONFIG_ENV_IS_IN_FLASH    1
+
+//#define CONFIG_ENV_SIZE           0x10000  /* Total Size of Environment Sector */
+
+增加如下定义：
+
+/*以下为NAND启动及驱动相关*/
+
+#define CONFIG_S3C2440_NAND_BOOT  1
+
+#define CONFIG_NAND_S3C2440
+
+ 
+
+#define NAND_CTL_BASE  0x4E000000  //Nand Flash配置寄存器基地址，查2440手册可得知
+
+#define oNFCONF  0x00 //相对Nand配置寄存器基地址的偏移量，还是配置寄存器的基地址
+
+#define oNFCONT  0x04 //相对Nand配置寄存器基地址的偏移量，可得到控制寄存器的基地址(0x4E000004)
+
+#define oNFADDR  0x0c //相对Nand配置寄存器基地址的偏移量，可得到地址寄存器的基地址(0x4E00000c)
+
+#define oNFDATA  0x10 //相对Nand配置寄存器基地址的偏移量，可得到数据寄存器的基地址(0x4E000010)
+
+#define oNFCMD   0x08 //相对Nand配置寄存器基地址的偏移量，可得到指令寄存器的基地址(0x4E000008)
+
+#define oNFSTAT  0x20 //相对Nand配置寄存器基地址的偏移量，可得到状态寄存器的基地址(0x4E000020)
+
+#define oNFECC   0x2c //相对Nand配置寄存器基地址的偏移量，可得到ECC寄存器的基地址(0x4E00002c)
+
+ 
+
+#define UBOOT_LENGTH  0x40000 /*256K*/
+
+#define STACK_BASE  0x33f00000     //定义堆栈的地址
+
+#define STACK_SIZE  0x8000         //堆栈的长度大小
+
+ 
+
+#define CONFIG_CMD_NAND
+
+#define CONFIG_CMDLINE_EDITING
+
+#ifdef CONFIG_CMDLINE_EDITING
+
+#undef CONFIG_AUTO_COMPLETE
+
+#else
+
+#define CONFIG_AUTO_COMPLETE
+
+#endif
+
+ 
+
+/* NAND flash settings */
+
+#if defined(CONFIG_CMD_NAND)
+
+#define CONFIG_SYS_NAND_BASE            0x4E000000 //Nand配置寄存器基地址
+
+#define CONFIG_SYS_MAX_NAND_DEVICE      1
+
+#define CONFIG_MTD_NAND_VERIFY_WRITE    1
+
+//#define NAND_SAMSUNG_LP_OPTIONS       1  //注意：我们这里是64M的Nand Flash，所以不用，如果是128M的大块Nand Flash，则需加上
+
+#endif
+
+ 
+
+//添加环境变量保存到Nand的宏(注意：如果你要使用从Nor启动的saveenv命令，则不要这些Nand宏定义)
+
+#define CONFIG_ENV_IS_IN_NAND  1
+
+#define CONFIG_ENV_OFFSET      0x30000 //将环境变量保存到nand中的0x30000位置
+
+#define CONFIG_ENV_SIZE        0x10000 /* Total Size of Environment Sector */
+
+在arch\arm\cpu\arm920t\start.S文件中增加如下代码:
+
+ 
+
+#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+
+       bl    cpu_init_crit
+
+#endif
+
+ 
+
+//下面添加2440中u-boot从Nand Flash启动
+
+ 
+
+#ifdef CONFIG_S3C2440_NAND_BOOT
+
+    mov r1, #NAND_CTL_BASE   //复位Nand Flash
+
+    ldr r2, =( (7<<12)|(7<<8)|(7<<4)|(0<<0) )
+
+    str r2, [r1, #oNFCONF]   //设置配置寄存器的初始值，参考s3c2440手册
+
+    ldr r2, [r1, #oNFCONF]
+
+ 
+
+    ldr r2, =( (1<<4)|(0<<1)|(1<<0) )
+
+    str r2, [r1, #oNFCONT]   //设置控制寄存器
+
+    ldr r2, [r1, #oNFCONT]
+
+ 
+
+    ldr r2, =(0x6)           //RnB Clear
+
+    str r2, [r1, #oNFSTAT]
+
+    ldr r2, [r1, #oNFSTAT]
+
+    mov r2, #0xff            //复位command
+
+    strb r2, [r1, #oNFCMD]
+
+ 
+
+    mov r3, #0               //等待
+
+nand1:
+
+    add r3, r3, #0x1
+
+    cmp r3, #0xa
+
+    blt nand1
+
+ 
+
+nand2:
+
+    ldr r2, [r1, #oNFSTAT]   //等待就绪
+
+    tst r2, #0x4
+
+    beq nand2
+
+ 
+
+    ldr r2, [r1, #oNFCONT]
+
+    orr r2, r2, #0x2         //取消片选
+
+    str r2, [r1, #oNFCONT]
+
+ 
+
+    //get read to call C functions (for nand_read())
+
+    ldr sp, DW_STACK_START   //为C代码准备堆栈,DW_STACK_START定义在下面
+
+    mov fp, #0              
+
+ 
+
+    //copy U-Boot to RAM
+
+    ldr r0, =CONFIG_SYS_LOAD_ADDR//传递给C代码的第一个参数：u-boot在RAM中的起始地址 //暂时为这个值
+
+    mov r1, #0x0      //传递给C代码的第二个参数：Nand Flash的起始地址
+
+    mov r2, #UBOOT_LENGTH  //传递给C代码的第三个参数：u-boot的长度大小
+
+    bl nand_read_ll   //此处调用C代码中读Nand的函数，现在还没有要自己编写实现
+
+    tst r0, #0x0
+
+    beq ok_nand_read
+
+ 
+
+bad_nand_read:
+
+    loop2: b loop2    //infinite loop
+
+ 
+
+ok_nand_read:
+
+    //检查搬移后的数据，如果前4k完全相同，表示搬移成功
+
+    mov r0, #0
+
+    ldr r1, =CONFIG_SYS_LOAD_ADDR//暂时为这个值
+
+    mov r2, #0x400           //4 bytes * 1024 = 4K-bytes
+
+go_next:
+
+    ldr r3, [r0], #4
+
+    ldr r4, [r1], #4
+
+    teq r3, r4
+
+    bne notmatch
+
+    subs r2, r2, #4
+
+    beq board_init_f
+
+    bne go_next
+
+ 
+
+notmatch:
+
+    loop3: b loop3           //infinite loop
+
+#endif //CONFIG_S3C2440_NAND_BOOT
+
+ 
+
+.align 2   /*add by bsc 2010-2-6 13:11*/
+
+DW_STACK_START: .word STACK_BASE+STACK_SIZE-4
+
+ 
+
+增加从NAND FLASH读取数据到内存的函数，文件名为\nand_read.c放到board\samsung\smdk2440\nand_read.c下。
+
+#include <config.h>
+
+ 
+
+#define NF_BASE   0x4E000000  //Nand Flash配置寄存器基地址
+
+ 
+
+#define __REGb(x) (*(volatile unsigned char *)(x))
+
+#define __REGi(x) (*(volatile unsigned int  *)(x))
+
+ 
+
+#define NFCONF __REGi(NF_BASE + 0x0 )  //通过偏移量还是得到配置寄存器基地址
+
+#define NFCONT __REGi(NF_BASE + 0x4 )  //通过偏移量得到控制寄存器基地址
+
+#define NFCMD  __REGb(NF_BASE + 0x8 )  //通过偏移量得到指令寄存器基地址
+
+#define NFADDR __REGb(NF_BASE + 0xC )  //通过偏移量得到地址寄存器基地址
+
+#define NFDATA __REGb(NF_BASE + 0x10)  //通过偏移量得到数据寄存器基地址
+
+#define NFSTAT __REGb(NF_BASE + 0x20)  //通过偏移量得到状态寄存器基地址
+
+ 
+
+#define NAND_CHIP_ENABLE  (NFCONT &= ~(1<<1))  //Nand片选使能
+
+#define NAND_CHIP_DISABLE (NFCONT |= (1<<1))   //取消Nand片选
+
+#define NAND_CLEAR_RB     (NFSTAT |= (1<<2))
+
+#define NAND_DETECT_RB    { while(! (NFSTAT&(1<<2)) );}
+
+ 
+
+ 
+
+#define NAND_SECTOR_SIZE 512
+
+#define NAND_BLOCK_MASK (NAND_SECTOR_SIZE - 1)
+
+ 
+
+/* low level nand read function */
+
+int nand_read_ll(unsigned char *buf, unsigned long start_addr, int size)
+
+{
+
+    int i, j;
+
+ 
+
+    if ((start_addr & NAND_BLOCK_MASK) || (size & NAND_BLOCK_MASK))
+
+    {
+
+        return -1; //地址或长度不对齐
+
+    }
+
+ 
+
+    NAND_CHIP_ENABLE; //选中Nand片选
+
+ 
+
+    for(i=start_addr; i < (start_addr + size);)
+
+    {
+
+        //发出READ0指令
+
+ 
+
+        NAND_CLEAR_RB;
+
+        NFCMD = 0;
+
+ 
+
+        //对Nand进行寻址
+
+        NFADDR = i & 0xFF;
+
+ 
+
+        NFADDR = (i >> 9) & 0xFF;
+
+        NFADDR = (i >> 17) & 0xFF;
+
+        NFADDR = (i >> 25) & 0xFF;
+
+ 
+
+        NAND_DETECT_RB;
+
+ 
+
+        for(j=0; j < NAND_SECTOR_SIZE; j++, i++)
+
+        {
+
+            *buf = (NFDATA & 0xFF);
+
+            buf++;
+
+        }
+
+    }
+
+ 
+
+    NAND_CHIP_DISABLE; //取消片选信号
+
+ 
+
+    return 0;
+
+}
+
+ 
+
+修改board/samsung/smdk2440/ makefile
+
+COBJS    := smdk2440.o flash.o nand_read.o
+
+ 
+
+drivers/mtd/nand/s3c2440_nand.c  目录下新建s3c2440_nand.c文件实现对nand FLASH的操作。
+
+ 
+
+#include <common.h>
+
+ 
+
+#if 0
+
+#define DEBUGN    printf
+
+#else
+
+#define DEBUGN(x, args ...) {}
+
+#endif
+
+ 
+
+#include <nand.h>
+
+#include <asm/arch/s3c24x0_cpu.h>
+
+#include <asm/io.h>
+
+ 
+
+ 
+
+#define __REGb(x)    (*(volatile unsigned char *)(x))
+
+#define __REGi(x)    (*(volatile unsigned int *)(x))
+
+ 
+
+ 
+
+#define NF_BASE  0x4e000000             //Nand配置寄存器基地址
+
+#define NFCONF   __REGi(NF_BASE + 0x0)  //偏移后还是得到配置寄存器基地址
+
+#define NFCONT   __REGi(NF_BASE + 0x4)  //偏移后得到Nand控制寄存器基地址
+
+#define NFCMD    __REGb(NF_BASE + 0x8)  //偏移后得到Nand指令寄存器基地址
+
+#define NFADDR   __REGb(NF_BASE + 0xc)  //偏移后得到Nand地址寄存器基地址
+
+#define NFDATA   __REGb(NF_BASE + 0x10) //偏移后得到Nand数据寄存器基地址
+
+#define NFMECCD0 __REGi(NF_BASE + 0x14) //偏移后得到Nand主数据区域ECC0寄存器基地址
+
+#define NFMECCD1 __REGi(NF_BASE + 0x18) //偏移后得到Nand主数据区域ECC1寄存器基地址
+
+#define NFSECCD  __REGi(NF_BASE + 0x1C) //偏移后得到Nand空闲区域ECC寄存器基地址
+
+#define NFSTAT   __REGb(NF_BASE + 0x20) //偏移后得到Nand状态寄存器基地址
+
+#define NFSTAT0  __REGi(NF_BASE + 0x24) //偏移后得到Nand ECC0状态寄存器基地址
+
+#define NFSTAT1  __REGi(NF_BASE + 0x28) //偏移后得到Nand ECC1状态寄存器基地址
+
+#define NFMECC0  __REGi(NF_BASE + 0x2C) //偏移后得到Nand主数据区域ECC0状态寄存器基地址
+
+#define NFMECC1  __REGi(NF_BASE + 0x30) //偏移后得到Nand主数据区域ECC1状态寄存器基地址
+
+#define NFSECC   __REGi(NF_BASE + 0x34) //偏移后得到Nand空闲区域ECC状态寄存器基地址
+
+#define NFSBLK   __REGi(NF_BASE + 0x38) //偏移后得到Nand块开始地址
+
+#define NFEBLK   __REGi(NF_BASE + 0x3c) //偏移后得到Nand块结束地址
+
+ 
+
+#define S3C2440_NFCONT_nCE  (1<<1)
+
+#define S3C2440_ADDR_NALE   0x0c
+
+#define S3C2440_ADDR_NCLE   0x08
+
+ 
+
+ulong IO_ADDR_W = NF_BASE;
+
+ 
+
+static void s3c2440_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
+
+{
+
+    struct nand_chip *chip = mtd->priv;
+
+ 
+
+    DEBUGN("hwcontrol(): 0x%02x 0x%02x\n", cmd, ctrl);
+
+ 
+
+    if (ctrl & NAND_CTRL_CHANGE) {
+
+        IO_ADDR_W = NF_BASE;
+
+ 
+
+        if (!(ctrl & NAND_CLE))                //要写的是地址
+
+            IO_ADDR_W |= S3C2440_ADDR_NALE;
+
+        if (!(ctrl & NAND_ALE))                //要写的是命令
+
+            IO_ADDR_W |= S3C2440_ADDR_NCLE;
+
+ 
+
+        if (ctrl & NAND_NCE)
+
+            NFCONT &= ~S3C2440_NFCONT_nCE;    //使能nand flash
+
+        else
+
+            NFCONT |= S3C2440_NFCONT_nCE;     //禁止nand flash
+
+    }
+
+ 
+
+    if (cmd != NAND_CMD_NONE)
+
+        writeb(cmd,(void *)IO_ADDR_W);
+
+}
+
+ 
+
+static int s3c2440_dev_ready(struct mtd_info *mtd)
+
+{
+
+    DEBUGN("dev_ready\n");
+
+    return (NFSTAT & 0x01);
+
+}
+
+ 
+
+int board_nand_init(struct nand_chip *nand)
+
+{
+
+    u_int32_t cfg;
+
+    u_int8_t tacls, twrph0, twrph1;
+
+              struct s3c24x0_clock_power * const clk_power = s3c24x0_get_base_clock_power();
+
+ 
+
+    DEBUGN("board_nand_init()\n");
+
+ 
+
+    /*clk_power->CLKCON |= (1 << 4);*/
+
+    writel(readl(&clk_power->clkcon) | (1 << 4), &clk_power->clkcon);
+
+ 
+
+    twrph0 = 4; twrph1 = 2; tacls = 0;
+
+ 
+
+    cfg = (tacls<<12)|(twrph0<<8)|(twrph1<<4);
+
+    NFCONF = cfg;
+
+ 
+
+    cfg = (1<<6)|(1<<4)|(0<<1)|(1<<0);
+
+    NFCONT = cfg;
+
+ 
+
+    /* initialize nand_chip data structure */
+
+    nand->IO_ADDR_R = nand->IO_ADDR_W = (void *)0x4e000010;
+
+ 
+
+    /* read_buf and write_buf are default */
+
+    /* read_byte and write_byte are default */
+
+ 
+
+    /* hwcontrol always must be implemented */
+
+    nand->cmd_ctrl = s3c2440_hwcontrol;
+
+ 
+
+    nand->dev_ready = s3c2440_dev_ready;
+
+ 
+
+    return 0;
+
+}
+
+然后，在drivers/mtd/nand/Makefile文件中添加s3c2440_nand.c的编译项，如下：
+
+COBJS-$(CONFIG_NAND_S3C2440) += s3c2440_nand.o
+
+在u-boot-2010.12\include\configs\smdk2440.h中增加宏定义：
+
+# define  CONFIG_NAND_S3C2440
+
+ 
+
+重新编译，将u-boot.bin下载到内存运行，可以运行，FLASH也正常的读写。注意，此时我们的uboot还不支持从NAND FLASH启动，前面的步骤只是为了调试方便，我们将可以看到在内存中运行的u-boot成功的将NAND FLASH中的数据拷贝到了内存中CONFIG_SYS_LOAD_ADDR的位置。接下来我们让其支持在NAND FLASH中的启动。
+
+ 
+
+将上面的ldr r0, =CONFIG_SYS_LOAD_ADDR和ldr r1, =CONFIG_SYS_LOAD_ADDR替换为ldr r0, =CONFIG_SYS_TEXT_BASE和ldr r1, =CONFIG_SYS_TEXT_BASE。
+
+ 
+
+通过查看u-boot.map可以看到，我们的nand_read_ll()函数被连接在4K之后的位置，所以根本无法再启动时实现数据到内存的拷贝。因此我们根据网友的说法修改arch\arm\cpu\arm920t\u-boot.lds如下：
+
+.text :
+
+       {
+
+              arch/arm/cpu/arm920t/start.o (.text)
+
+              board/samsung/smdk2440/lowlevel_init.o    (.text)
+
+              board/samsung/smdk2440/nand_read.o (.text)
+
+              *(.text)
+
+       }
+
+编译发现，编译通不过，出现重定义的错误。这可能是新版本的编译和连接规则有变化导致的，具体原因还不清楚，因此我们采用其他的办法。
+
+board/samsung/smdk2440/libsmdk2440.o: In function `nand_read_ll':
+
+/home/bsc/samba/u-boot-2010.12/board/samsung/smdk2440/nand_read.c:30: multiple definition of `nand_read_ll'
+
+board/samsung/smdk2440/nand_read.o:/home/bsc/samba/u-boot-2010.12/board/samsung/smdk2440/nand_read.c:30: first defined here
+
+board/samsung/smdk2440/libsmdk2440.o: In function `lowlevel_init':
+
+/home/bsc/samba/u-boot-2010.12/board/samsung/smdk2440/lowlevel_init.S:137: multiple definition of `lowlevel_init'
+
+board/samsung/smdk2440/lowlevel_init.o:/home/bsc/samba/u-boot-2010.12/board/samsung/smdk2440/lowlevel_init.S:137: first defined here
+
+make: *** [u-boot] 错误 1
+
+这可能是新版本的编译和连接规则有变化导致的，具体原因还不清楚，因此我们采用其他的办法。修改arch\arm\cpu\arm920t\u-boot.lds如下：
+
+.text :
+
+       {
+
+              arch/arm/cpu/arm920t/start.o (.text)
+
+              board/samsung/smdk2440/ libsmdk2440.o    (.text)
+
+arch/arm/lib/libarm.o     (.text)
+
+              *(.text)
+
+       }
+
+编译之后发现，board_init_f函数还是超过了4K，我们只能对前面的代码进行瘦身了，我们的目标板没有NOR FLASH，所以我们取消NOR FLASH的支持。
+
+在u-boot-2010.12\include\configs\smdk2440.h中增加宏定义：
+
+/*去掉NOR FLASH支持*/
+
+#define CONFIG_SYS_NO_FLASH
+
+#define CONFIG_CMD_FLASH  /* flinfo, erase, protect   */
+
+#define CONFIG_CMD_IMLS            /* List all found images  */
+
+修改board/samsung/smdk2440/ makefile，取消对flash的编译。
+
+COBJS    := smdk2440.o nand_read.o
+
+编译后下载到内存，杯具又发生了，跑进board_init_r（）函数的时候死机了。至此相当的郁闷了，没办法再修改arch\arm\cpu\arm920t\u-boot.lds如下：
+
+.text :
+
+       {
+
+              arch/arm/cpu/arm920t/start.o (.text)
+
+              board/samsung/smdk2440/ libsmdk2440.o    (.text)
+
+              *(.text)
+
+       }
+
+在编译，下载到内存运行，可以运行。但是还是相当杯具的，通过查看u-boot.map可以看到arch/arm/lib/libarm.o被连接到了4K之外，4K之内没有这个程序我们是不可能实现NAND启动的。但是天无绝人之路，我们可以让U-boot提前进入内存运行。思路是，我们提前将代码拷贝到内存中，提前跳转到内存中运行不再回来。修改arch\arm\cpu\arm920t\start.S文件如下：
+
+ 
+
+#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+
+       bl    cpu_init_crit
+
+#endif
+
+ 
+
+//下面添加2440中u-boot从Nand Flash启动
+
+#ifdef CONFIG_S3C2440_NAND_BOOT
+
+    mov r1, #NAND_CTL_BASE   //复位Nand Flash
+
+    ldr r2, =( (7<<12)|(7<<8)|(7<<4)|(0<<0) )
+
+    str r2, [r1, #oNFCONF]   //设置配置寄存器的初始值，参考s3c2440手册
+
+    ldr r2, [r1, #oNFCONF]
+
+ 
+
+    ldr r2, =( (1<<4)|(0<<1)|(1<<0) )
+
+    str r2, [r1, #oNFCONT]   //设置控制寄存器
+
+    ldr r2, [r1, #oNFCONT]
+
+ 
+
+    ldr r2, =(0x6)           //RnB Clear
+
+    str r2, [r1, #oNFSTAT]
+
+    ldr r2, [r1, #oNFSTAT]
+
+    mov r2, #0xff            //复位command
+
+    strb r2, [r1, #oNFCMD]
+
+ 
+
+    mov r3, #0               //等待
+
+nand1:
+
+    add r3, r3, #0x1
+
+    cmp r3, #0xa
+
+    blt nand1
+
+ 
+
+nand2:
+
+    ldr r2, [r1, #oNFSTAT]   //等待就绪
+
+    tst r2, #0x4
+
+    beq nand2
+
+ 
+
+    ldr r2, [r1, #oNFCONT]
+
+    orr r2, r2, #0x2         //取消片选
+
+    str r2, [r1, #oNFCONT]
+
+ 
+
+    //get read to call C functions (for nand_read())
+
+    ldr sp, DW_STACK_START   //为C代码准备堆栈,DW_STACK_START定义在下面
+
+    mov fp, #0              
+
+ 
+
+    //copy U-Boot to RAM
+
+    ldr r0, =CONFIG_SYS_TEXT_BASE//传递给C代码的第一个参数：u-boot在RAM中的起始地址
+
+    mov r1, #0x0      //传递给C代码的第二个参数：Nand Flash的起始地址
+
+    mov r2, #UBOOT_LENGTH  //传递给C代码的第三个参数：u-boot的长度大小
+
+    bl nand_read_ll   //此处调用C代码中读Nand的函数，现在还没有要自己编写实现
+
+    tst r0, #0x0
+
+    beq ok_nand_read
+
+ 
+
+bad_nand_read:
+
+    loop2: b loop2    //infinite loop
+
+ 
+
+ok_nand_read:
+
+    //检查搬移后的数据，如果前4k完全相同，表示搬移成功
+
+    mov r0, #0
+
+    ldr r1, =CONFIG_SYS_TEXT_BASE
+
+    mov r2, #0x400           //4 bytes * 1024 = 4K-bytes
+
+go_next:
+
+    ldr r3, [r0], #4
+
+    ldr r4, [r1], #4
+
+    teq r3, r4
+
+    bne notmatch
+
+    subs r2, r2, #4
+
+    beq relocations       /*注意此句，直接跳转到relocate_code 函数的调整部分，因为我们不打算在board_init_f（）函数中再回来了*/
+
+    bne go_next
+
+ 
+
+notmatch:
+
+    loop3: b loop3           //infinite loop
+
+ 
+
+#endif //CONFIG_S3C2440_NAND_BOOT
+
+ 
+
+/*------------------------------------------------------------------------------*/
+
+ 
+
+/*
+
+ * void relocate_code (addr_sp, gd, addr_moni)
+
+ *
+
+ * This "function" does not return, instead it continues in RAM
+
+ * after relocating the monitor code.
+
+ *
+
+ */
+
+       .globl      relocate_code
+
+relocate_code:
+
+       mov r4, r0      /* save addr_sp */
+
+       mov r5, r1      /* save addr of gd */
+
+       mov r6, r2      /* save addr of destination */
+
+ 
+
+       /* Set up the stack                                         */
+
+stack_setup:
+
+       mov sp, r4
+
+      
+
+       adr   r0, _start
+
+       cmp r0, r6
+
+       beq  clear_bss        /* skip relocation */
+
+       mov r1, r6                    /* r1 <- scratch for copy_loop */
+
+       ldr   r2, _TEXT_BASE
+
+       ldr   r3, _bss_start_ofs
+
+       add  r2, r0, r3        /* r2 <- source end address        */
+
+ 
+
+copy_loop:
+
+       ldmia      r0!, {r9-r10}         /* copy from source address [r0]    */
+
+       stmia       r1!, {r9-r10}         /* copy to   target address [r1]    */
+
+       cmp r0, r2                    /* until source end address [r2]    */
+
+       blo   copy_loop
+
+      
+
+relocations:     /*增加标号，以便跳转到这里*/
+
+       ldr r6, =CONFIG_SYS_TEXT_BASE /*注意，R6下面被用到表示新的目标地址*/
+
+ 
+
+#ifndef CONFIG_PRELOADER
+
+       /*
+
+        * fix .rel.dyn relocations
+
+        */
+
+      
+
+       ldr   r0, _TEXT_BASE         /* r0 <- Text base */
+
+       sub  r9, r6, r0        /* r9 <- relocation offset */
+
+       ldr   r10, _dynsym_start_ofs  /* r10 <- sym table ofs */
+
+       add  r10, r10, r0            /* r10 <- sym table in FLASH */
+
+       ldr   r2, _rel_dyn_start_ofs    /* r2 <- rel dyn start ofs */
+
+       add  r2, r2, r0        /* r2 <- rel dyn start in FLASH */
+
+       ldr   r3, _rel_dyn_end_ofs     /* r3 <- rel dyn end ofs */
+
+       add  r3, r3, r0        /* r3 <- rel dyn end in FLASH */
+
+fixloop:
+
+       ldr   r0, [r2]           /* r0 <- location to fix up, IN FLASH! */
+
+       add  r0, r0, r9        /* r0 <- location to fix up in RAM */
+
+       ldr   r1, [r2, #4]
+
+       and  r7, r1, #0xff
+
+       cmp r7, #23                  /* relative fixup? */
+
+       beq  fixrel
+
+       cmp r7, #2                    /* absolute fixup? */
+
+       beq  fixabs
+
+       /* ignore unknown type of fixup */
+
+       b     fixnext
+
+fixabs:
+
+       /* absolute fix: set location to (offset) symbol value */
+
+       mov r1, r1, LSR #4              /* r1 <- symbol index in .dynsym */
+
+       add  r1, r10, r1             /* r1 <- address of symbol in table */
+
+       ldr   r1, [r1, #4]            /* r1 <- symbol value */
+
+       add  r1, r1, r9        /* r1 <- relocated sym addr */
+
+       b     fixnext
+
+fixrel:
+
+       /* relative fix: increase location by offset */
+
+       ldr   r1, [r0]
+
+       add  r1, r1, r9
+
+fixnext:
+
+       str    r1, [r0]
+
+       add  r2, r2, #8        /* each rel.dyn entry is 8 bytes */
+
+       cmp r2, r3
+
+       blo   fixloop
+
+#endif
+
+ 
+
+clear_bss:
+
+#ifndef CONFIG_PRELOADER
+
+       ldr   r0, _bss_start_ofs
+
+       ldr   r1, _bss_end_ofs
+
+       ldr   r3, _TEXT_BASE         /* Text base */
+
+       mov r4, r6             /* reloc addr */
+
+       add  r0, r0, r3     /*注意此句修改*/
+
+       add  r1, r1, r3    /*注意此句修改*/
+
+       mov r2, #0x00000000           /* clear                      */
+
+ 
+
+clbss_l:str       r2, [r0]           /* clear loop...                  */
+
+       add  r0, r0, #4
+
+       cmp r0, r1
+
+       bne  clbss_l
+
+/*
+
+       bl coloured_LED_init
+
+       bl red_LED_on
+
+*//* by bsc 2011/2/23 13:44:29*/
+
+#endif
+
+ 
+
+/* Set stackpointer in internal RAM to call board_init_f */
+
+call_board_init_f:
+
+       ldr   sp, =(CONFIG_SYS_INIT_SP_ADDR)
+
+       bic   sp, sp, #7 /* 8-byte alignment for ABI compliance */
+
+       ldr   r0,=0x00000000
+
+       /*bl  board_init_f*/ /*删除此句，我们用绝对地址跳转到内存去了，不再回来了*/
+
+       ldr pc, _board_init_f     /*增加此句，我们用绝对地址跳转到内存去了，不再回来了*/
+
+      
+
+_board_init_f:        /*增加此句，我们用绝对地址跳转到内存去了，不再回来了*/
+
+       .word board_init_f
+
+/*
+
+ * We are done. Do not return, instead branch to second part of board
+
+ * initialization, now running from RAM.
+
+ */
+
+#ifdef CONFIG_NAND_SPL
+
+       ldr     r0, _nand_boot_ofs
+
+       mov pc, r0
+
+ 
+
+_nand_boot_ofs:
+
+       .word nand_boot
+
+#else
+
+       ldr   r0, _board_init_r_ofs
+
+       adr   r1, _start
+
+       add  lr, r0, r1
+
+       add  lr, lr, r9
+
+       /* setup parameters for board_init_r */
+
+       mov r0, r5             /* gd_t */
+
+       mov r1, r6             /* dest_addr */
+
+       /* jump to it ... */
+
+       mov pc, lr
+
+ 
+
+_board_init_r_ofs:
+
+       .word board_init_r - _start
+
+#endif
+
+ 
+
+_rel_dyn_start_ofs:
+
+       .word __rel_dyn_start - _start
+
+_rel_dyn_end_ofs:
+
+       .word __rel_dyn_end - _start
+
+_dynsym_start_ofs:
+
+       .word __dynsym_start - _start
+
+ 
+
+.align 2   /*add by bsc 2010-2-6 13:11*/
+
+DW_STACK_START: .word STACK_BASE+STACK_SIZE-4
+
+修改完arch\arm\cpu\arm920t\start.S文件之后，我们会发现，有一句非常重要的代码被我们删除再也执行不到了，那就是设置堆栈指针：mov sp, r4
+
+因此我们需要在board_init_f（）函数中设置。
+
+修改\arch\arm\lib\board.c代码如下：
+
+ 
+
+首先将board_init_f（）与board_init_r（）函数的顺序调换下，因为我们要在board_init_f（）中调用board_init_r（）。
+
+ 
+
+gd->mon_len = 0x700000 ; /*修改此句以保证与配置的一致性add by bsc  具体原因请查看代码中对此变量的使用即可明白，注意我们的 _TEXT_BASE=0x33f80000*/
+
+ 
+
+函数最后：
+
+__asm__ __volatile__("mov sp,%0"::"r"(addr_sp):"sp");/*add by bsc 2011/2/24 15:17:48*/
+
+             
+
+#ifdef CONFIG_S3C2440_NAND_BOOT   /*add by bsc 2011/2/24 15:18:04*/
+
+       board_init_r(id, addr);
+
+#else
+
+       relocate_code (addr_sp, id, addr);
+
+       /* NOTREACHED - relocate_code() does not return */
+
+#endif
+
+       /*relocate_code (addr_sp, id, addr);*//*add by bsc 2011/2/24 15:18:28*/
+
+       /* NOTREACHED - relocate_code() does not return */
+
+ 
+
+然后修改board\samsung\smdk2440\config.mk如下：
+
+CONFIG_SYS_TEXT_BASE = 0x33f80000
+
+ 
+
+然后修改include\configs\smdk2440.h如下：
+
+增加宏定义：
+
+#define UBOOT_LENGTH  0x40000 /*uboot大小256K*/
+
+删除宏定义：
+
+#define CONFIG_SKIP_LOWLEVEL_INIT /*在内存中调试时增加此宏定义 by bsc */
+
+ 
+
+然后编译，烧写到NAND FLASH中，重启之后你会发现，终于可以运行啦。
+
+测试中发现，go命令好像有问题，直接死机了，其他一切正常。
+
+如果你还想看到u-boot启动时的输出版本信息等，修改\arch\arm\lib\board.c代码如下：board_init_r函数中修改
+
+   board_init();    /* Setup chipselects */
+#ifdef CONFIG_SERIAL_MULTI     serial_initialize(); #endif
+    debug ("Now running in RAM - U-Boot at: %08lx\n", dest_addr);     display_banner();     display_dram_config(); #ifdef CONFIG_LOGBUFFER     logbuff_init_ptrs (); #endif
+
+好了，现在uboot已经可以支持NAND FLASH启动和读写了。
+
+我们还可以在common\env_common.c文件中的default_environment[]数组中增加
+
+#if 1    /*add by bsc */
+
+   "uu="   "t 0x30000000 u-boot.bin;nand erase 0x0 0x30000;nand write 0x30000000 0x0 0x30000" "\0"
+
+   "kkn=" "t 0x30008000 zImage_nfs;bootm" "\0"
+
+   "kk="   "t 0x30000000 zImage;nand erase 0x50000 0x300000;nand write 0x30000000 0x50000 0x200000" "\0"
+
+   "yy="   "t 0x30000000 rootyaffs2.img;nand erase 0x250000 0x3db0000;nand write.yaffs2 0x30000000 0x250000 $(filesize)" "\0"
+
+   "firstboot=" "set bootcmd $(normalboot);save;nand erase 0x50000 0x3f00000;run kk;run yy" "\0"
+
+   "normalboot="   "nand read 0x30008000 0x50000 0x200000;bootm 0x30008000" "\0"
+
+#endif
+
+以使用 run uu；run yy这样的命令来实现一些操作。
+
+ 
+
+ 
+
+ 
+
+Yaffs2文件系统的移植主要涉及到u-boot对yaffs2文件系统的烧写支持、linux内核对yaffs2文件系统的支持，以及yaffs2文件系统的制作，现在我们按照从下到上的顺序来实现各部分的功能。本文重点参考黄刚的博文。
+
+1、实现u-boot对yaffs/yaffs2文件系统下载的支持。
+
+ 
+注意：这里对Nand的操作是基于MTD架构方式。
+
+通常一个Nnad Flash存储设备由若干块组成，1个块由若干页组成。一般128MB以下容量的Nand Flash芯片，一页大小为528B，被依次分为2个256B的主数据区和16B的额外空间；128MB以上容量的Nand Flash芯片，一页大小通常为2KB。由于Nand Flash出现位反转的概率较大，一般在读写时需要使用ECC进行错误检验和恢复。
+
+Yaffs/yaffs2文件系统的设计充分考虑到Nand Flash以页为存取单位等的特点，将文件组织成固定大小的段(Chunk)。以528B的页为例，Yaffs/yaffs2文件系统使用前512B存储 数据和16B的额外空间存放数据的ECC和文件系统的组织信息等(称为OOB数据)。通过OOB数据，不但能实现错误检测和坏块处理，同时还可以避免加载 时对整个存储介质的扫描，加快了文件系统的加载速度。以下是Yaffs/yaffs2文件系统页的结构说明：
+
+     Yaffs页结构说明 ==============================================    字节                   用途 ==============================================  0 - 511                存储数据(分为两个半部) 512 - 515               系统信息    516                  数据状态字    517                  块状态字 518 - 519               系统信息 520 - 522               后半部256字节的ECC 523 - 524               系统信息 525 - 527               前半部256字节的ECC ==============================================
+
+好了，在了解Nand Flash组成和Yaffs/yaffs2文件系统结构后，我们再回到u-boot中。目前，在u-boot中已经有对Cramfs、Jffs2等文件系 统的读写支持，但与带有数据校验等功能的OOB区的Yaffs/Yaffs2文件系统相比，他们是将所有文件数据简单的以线性表形式组织的。所以，我们只要在此基础上通过修改u-boot的Nand Flash读写命令，增加处理00B区域数据的功能，即可以实现对Yaffs/Yaffs2文件系统的读写支持。
+
+实现u-boot对Yaffs或者Yaffs2文件系统的读写支持步骤如下：
+
+①、在include/configs/smdk2440.h头文件中定义一个管理对Yaffs2支持的宏和开启u-boot中对Nand Flash默认分区的宏，如下：
+
+#define CONFIG_MTD_NAND_YAFFS2   1 //定义一个管理对Yaffs2支持的宏
+
+//开启Nand Flash默认分区，注意此处的分区要和你的内核中的分区保持一致 #define MTDIDS_DEFAULT "nand0=nandflash0" #define MTDPARTS_DEFAULT "mtdparts=nandflash0:192k(bootloader)," \                      "64k(params)," \                      "2m(kernel)," \                      "-(root)"
+
+ 
+
+②、在common/cmd_nand.c 原来对Nand操作的命令集列表中添加Yaffs2对Nand的写命令，如下：//在U_BOOT_CMD中添加
+
+U_BOOT_CMD(nand, CONFIG_SYS_MAXARGS, 1, do_nand,     "NAND sub-system",     "info - show available NAND devices\n"     "nand device [dev] - show or set current device\n"     "nand read - addr off|partition size\n"     "nand write - addr off|partition size\n"     " read/write 'size' bytes starting at offset 'off'\n"     " to/from memory address 'addr', skipping bad blocks.\n"
+
+//注意：这里只添加了yaffs2的写命令，因为我们只用u-boot下载(即写)功能，所以我们没有添加yaffs2读的命令 #if defined(CONFIG_MTD_NAND_YAFFS2)     "nand write[.yaffs2] - addr off|partition size - write `size' byte yaffs image\n"     " starting at offset off' from memory address addr' (.yaffs2 for 512+16 NAND)\n" #endif
+
+    "nand erase [clean] [off size] - erase 'size' bytes from\n"     " offset 'off' (entire device if not specified)\n"     "nand bad - show bad blocks\n"     "nand dump[.oob] off - dump page\n"     "nand scrub - really clean NAND erasing bad blocks (UNSAFE)\n"     "nand markbad off [...] - mark bad block(s) at offset (UNSAFE)\n"     "nand biterr off - make a bit error at offset (UNSAFE)" #ifdef CONFIG_CMD_NAND_LOCK_UNLOCK     "\n"     "nand lock [tight] [status]\n"     " bring nand to lock state or display locked pages\n"     "nand unlock [offset] [size] - unlock section" #endif );
+
+接着，在该文件中对nand操作的do_nand函数中添加yaffs2对nand的操作，如下：
+
+if (strncmp(cmd, "read", 4) == 0 || strncmp(cmd, "write", 5) == 0)      {         int read;
+
+        if (argc < 4)             goto usage;
+
+        addr = (ulong)simple_strtoul(argv[2], NULL, 16);
+
+        read = strncmp(cmd, "read", 4) == 0; /* 1 = read, 0 = write */         printf("\nNAND %s: ", read ? "read" : "write");         if (arg_off_size(argc - 3, argv + 3, nand, &off, &size) != 0)             return 1;
+
+        s = strchr(cmd, '.');         if (!s || !strcmp(s, ".jffs2") || !strcmp(s, ".e") || !strcmp(s, ".i"))          {             if (read)                 ret = nand_read_skip_bad(nand, off, &size, (u_char *)addr);             else                 ret = nand_write_skip_bad(nand, off, &size, (u_char *)addr);         }
+
+//添加yaffs2相关操作，注意该处又关联到nand_write_skip_bad函数
+
+#if defined(CONFIG_MTD_NAND_YAFFS2)         else if (s != NULL && (!strcmp(s, ".yaffs2")))         {             nand->rw_oob = 1;             nand->skipfirstblk = 1;             ret = nand_write_skip_bad(nand,off,&size,(u_char *)addr);             nand->skipfirstblk = 0;             nand->rw_oob = 0;         } #endif
+
+        else if (!strcmp(s, ".oob"))          {             /* out-of-band data */             mtd_oob_ops_t ops =              {                 .oobbuf = (u8 *)addr,                 .ooblen = size,                 .mode = MTD_OOB_RAW             };
+
+            if (read)                 ret = nand->read_oob(nand, off, &ops);             else                 ret = nand->write_oob(nand, off, &ops);         }          else          {             printf("Unknown nand command suffix '%s'.\n", s);             return 1;         }
+
+        printf(" %zu bytes %s: %s\n", size, read ? "read" : "written", ret ? "ERROR" : "OK");
+
+        return ret == 0 ? 0 : 1;     }
+
+③、在include/linux/mtd/mtd.h头文件的mtd_info结构体中添加上面用到rw_oob和skipfirstblk数据成员，如下：
+
+#if defined(CONFIG_MTD_NAND_YAFFS2)     u_char rw_oob;     u_char skipfirstblk; #endif
+
+ 
+
+④、在第二步关联的drivers/mtd/nand/nand_util.c 的nand_write_skip_bad函数中添加对Nand OOB的相关操作，如下：
+
+int nand_write_skip_bad(nand_info_t *nand, loff_t offset, size_t *length, u_char *buffer) {     int rval;     size_t left_to_write = *length;     size_t len_incl_bad;     u_char *p_buffer = buffer;
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support     if(nand->rw_oob==1)         {         size_t oobsize = nand->oobsize;         size_t datasize = nand->writesize;         int datapages = 0;
+
+        if (((*length)%(nand->oobsize+nand->writesize)) != 0)          {          printf ("Attempt to write error length data!\n");          return -EINVAL;      }
+
+        datapages = *length/(datasize+oobsize);         *length = datapages*datasize;         left_to_write = *length;     } #endif
+
+    /* Reject writes, which are not page aligned */     if ((offset & (nand->writesize - 1)) != 0 ||      (*length & (nand->writesize - 1)) != 0) {         printf ("Attempt to write non page aligned data\n");         return -EINVAL;     }
+
+    len_incl_bad = get_len_incl_bad (nand, offset, *length);
+
+    if ((offset + len_incl_bad) >= nand->size) {         printf ("Attempt to write outside the flash area\n");         return -EINVAL;     }
+
+#if !defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support     if (len_incl_bad == *length) {         rval = nand_write (nand, offset, length, buffer);         if (rval != 0)             printf ("NAND write to offset %llx failed %d\n",                 offset, rval);
+
+        return rval;     } #endif
+
+    while (left_to_write > 0) {         size_t block_offset = offset & (nand->erasesize - 1);         size_t write_size;
+
+        WATCHDOG_RESET ();
+
+        if (nand_block_isbad (nand, offset & ~(nand->erasesize - 1))) {             printf ("Skip bad block 0x%08llx\n",                 offset & ~(nand->erasesize - 1));             offset += nand->erasesize - block_offset;             continue;         }
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support         if(nand->skipfirstblk==1)             {             nand->skipfirstblk=0;             printf ("Skip the first good block %llx\n", offset & ~(nand->erasesize - 1));             offset += nand->erasesize - block_offset;             continue;         } #endif
+
+        if (left_to_write < (nand->erasesize - block_offset))             write_size = left_to_write;         else             write_size = nand->erasesize - block_offset;
+
+        printf("\rWriting at 0x%llx -- ",offset); //add yaffs2 file system support
+
+        rval = nand_write (nand, offset, &write_size, p_buffer);         if (rval != 0) {             printf ("NAND write to offset %llx failed %d\n",                 offset, rval);             *length -= left_to_write;             return rval;         }
+
+        left_to_write -= write_size;         printf("%d%% is complete.",100-(left_to_write/(*length/100)));         offset += write_size;
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support         if(nand->rw_oob==1)             {             p_buffer += write_size+(write_size/nand->writesize*nand->oobsize);         }          else             {             p_buffer += write_size;         } #else         p_buffer += write_size; #endif
+
+    }
+
+    return 0; }
+
+⑤、在第四步nand_write_skip_bad函数中我们看到又对nand_write函数进行了访问，所以这一步是到drivers/mtd/nand/nand_base.c  的nand_write函数中添加对yaffs2的支持，如下：
+
+static int nand_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen, const uint8_t *buf) {     struct nand_chip *chip = mtd->priv;     int ret;
+
+ 
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support
+
+    int oldopsmode = 0;
+
+    if(mtd->rw_oob==1)         {         int i = 0;         int datapages = 0;
+
+        size_t oobsize = mtd->oobsize;         size_t datasize = mtd->writesize;
+
+        uint8_t oobtemp[oobsize];         datapages = len / (datasize);
+
+        for(i = 0; i < (datapages); i++)             {             memcpy((void *)oobtemp, (void *)(buf + datasize * (i + 1)), oobsize);             memmove((void *)(buf + datasize * (i + 1)), (void *)(buf + datasize * (i + 1) + oobsize), (datapages - (i + 1)) * (datasize) + (datapages - 1) * oobsize);             memcpy((void *)(buf+(datapages) * (datasize + oobsize) - oobsize), (void *)(oobtemp), oobsize);         }     } #endif
+
+ 
+
+    /* Do not allow reads past end of device */     if ((to + len) > mtd->size)         return -EINVAL;     if (!len)         return 0;
+
+    nand_get_device(chip, mtd, FL_WRITING);
+
+    chip->ops.len = len;     chip->ops.datbuf = (uint8_t *)buf;
+
+ 
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support
+
+    if(mtd->rw_oob!=1)         {         chip->ops.oobbuf = NULL;     }      else         {         chip->ops.oobbuf = (uint8_t *)(buf + len);         chip->ops.ooblen = mtd->oobsize;         oldopsmode = chip->ops.mode;         chip->ops.mode = MTD_OOB_RAW;     } #else     chip->ops.oobbuf = NULL; #endif
+
+ 
+
+    ret = nand_do_write_ops(mtd, to, &chip->ops);
+
+    *retlen = chip->ops.retlen;
+
+    nand_release_device(mtd);
+
+ 
+
+#if defined(CONFIG_MTD_NAND_YAFFS2) //add yaffs2 file system support
+
+    chip->ops.mode = oldopsmode; #endif
+
+ 
+
+    return ret; }
+
+OK，对yaffs2支持的代码已修改完毕，重新编译u-boot并下载到nand中，启动开发板，在u-boot的命令行输入:nand help查看nand的命令，可以看到多了一个nand write[.yaffs2]的命令，这个就是用来下载yaffs2文件系统到nand中的命令了。
+
+⑥、使用nand write[.yaffs2]命令把事前制作好的yaffs2文件系统下载到Nand Flash中(yaffs2文件系统的制作请参考后文)，下载操作步骤和效果图如下：
+
+tftp 0x30000000 root.bin //用tftp将yaffs2文件系统下载到内存的0x30000000位置
+nand erase 0x250000 0x3db0000 //擦除Nand的文件系统分区
+nand write.yaffs2 0x30000000 0x250000 0x658170 //将内存中的yaffs2文件系统写入Nand的文件系统分区，注意这里的0x658170是yaffs2文件系统的实际大小(可以在tftp传送完后可以看到)，要写正确，否则会形成假坏块
+
+ 
+
+2、Linux2.6.37下移植yaffs文件系统
+
+原始的linux内核是不支持Yaffs2文件系统的，我们首先需要下载yaffs2的内核补丁，给内核打上yaff2补丁才能使内核支持该文件系统。
+
+yaffs2 老版本不支持2.6.36以上内核。 网上下载的yaffs2常见版本（点击http://www.aleph1.co.uk/cgi-bin/viewcvs.cgi/下方的Download GNU tarball进行下载）一般不支持2.6.36/37。但2.6.36一下版本依然可以使用。
+
+最新的yaffs2采用git发布，利用git工具下载到最新的yaffs2源代码，即可支持。办法是使用到www.yaffs.net发布的git方法获得最新版，并且查看readme确认其支持2.6.36/37。yaffs有一个较大的变化，是在2.6.36/37内核发布之后的一段时间里出现的，主要就是patch-ker.sh多了一个参数，m/s 是选择multi version支持，还是single version支持。（注意：在最新的linux版本下用multi version支持。）
+
+(1)下载源代码
+
+如果系统已经安装git工具，就直接执行：
+
+git clone git://www.aleph1.co.uk/yaffs2
+
+如果没有git工具，请首先下载安装git（http://git-scm.com/）。当然，也可以在windows下用git工具下载。
+
+ (2)给内核打补丁
+
+yaffs源代码下载完后，放到某个目录下（但不要放在内核目录下！）进入yaffs源代码目录：
+
+#cd yaffs2
+
+打补丁（注意参数顺序不能错）：
+
+#./patch-kernel.sh c m  ../linux-2.6.37.1
+
+(3)然后配置内核：
+
+#cd   ../linux-2.6.37.1   //返回内核根目录
+
+# make ARCH＝arm CROSS_COMPILE=arm-linux-  menuconfig
+
+File systems -->
+
+Miscellaneous filesystems -->
+
+<*> YAFFS2 file system support
+
+(4) 重新编译内核
+
+# make ARCH＝arm CROSS_COMPILE=arm-linux-
+
+然后制作新的uImage，加载或者烧写到FLASH，如果能正确引导并加载yaffs文件系统则移植成功。
+
+特别说明：一旦在使用新版本yaffs补丁之前使用过旧版本补丁，新版本的补丁则打不上了，建议使用新版本重新编译内核。
+
+=======================
+
+需要注意：因为windows中下载导致文件编码和linux的不同。所以，如果是在windows下用git下载并传递到linux下的，则需要修改两个文件的编码:
+
+ (1) 在linux下，进入yaffs2源代码目录
+
+#vi patch-kernel.sh
+
+然后在vi中执行如下命令：
+
+ :set ff=unix
+
+保存退出
+
+然后修改权限使patch-kernel.sh具有可执行权限：
+
+#chmod  755  patch-kernel.sh
+
+ (3)修改fs/yaffs2/Kconfig的编码
+
+#vi  fs/yaffs2/Kconfig
+
+在vi中执行命令：
+
+:set  ff=unix
+
+保存退出,按照上述步骤进行打补丁。
+
+2、用busybox制作yaffs2根文件系统
+
+所谓的根文件系统，就是创建各个目录，并且在里面创建各种文件，比如在/bin,/sbin/目录下存放各种可执行的程序，在/etc目录下存放配置文件，在/lib目录下存放库文件，下面就可以文件系统的移植。
+
+1、根文件系统的目录结构 bin 存放所有用户都可以使用的、基本的命令。 sbin 存放的是基本的系统命令，它们用于启动系统、修复系统等。 usr 里面存放的是共享、只读的程序和数据。 proc 这是个空目录，常作为proc文件系统的挂载点。 dev 该目录存放设备文件和其它特殊文件。 etc 存放系统配置文件，包括启动文件。 lib 存放共享库和可加载块(即驱动程序)，共享库用于启动系统、运行根文件系统中的可执行程序。 boot 引导加载程序使用的静态文件 home 用户主目录，包括供服务账号锁使用的主目录，如FTP mnt 用于临时挂接某个文件系统的挂接点，通常是空目录。也可以在里面创建空的子目录。 opt 给主机额外安装软件所摆放的目录。 root root用户的主目录 tmp 存放临时文件，通常是空目录。 var 存放可变的数据。
+
+ 
+
+2、建立根文件系统的目录
+
+进入工作目录,创建一个shell的脚本用于构建根文件系统的各个目录。mkrootfs.sh，平且改变执行的权限。
+
+sudo chmod 777 mkrootfs.sh
+
+脚本内容如下：
+
+#!/bin/sh echo "------Create rootfs directons start...--------" mkdir rootfs cd rootfs echo "--------Create root,dev....----------" mkdir root dev etc boot tmp var sys proc lib mnt home mkdir etc/init.d etc/rc.d etc/sysconfig mkdir usr/sbin usr/bin usr/lib usr/modules
+
+mkidr proc/sys mkidr proc/sys/kernel
+
+mkidr proc/sys/kernel/
+
+echo "make node in dev/console dev/null" mknod -m 600 dev/console c 5 1 mknod -m 600 dev/null c 1 3 mkdir mnt/etc mnt/jffs2 mnt/yaffs mnt/data mnt/temp mkdir var/lib var/lock var/run var/tmp chmod 1777 tmp chmod 1777 var/tmp echo "-------make direction done---------"
+
+ 
+
+改变了tmp目录的使用权，让它开启sticky位，为tmp目录的使用权开启此位，可确保tmp目录底下建立的文件，，只有建立它的用户有权删除。
+
+3、编译和安装Busybox
+
+Bosybox 是一个遵循 GPL v2协议的开源项目，它在编写过程总对文件大小进行优化，并考虑了系统资源有限(比如内存等)的情况，使用 Busybox 可以自动生成根文件系统所需的bin、sbin、usr 目录和 linuxrc 文件。 
+
+首先下载busybox，下载地址：www.busybox.net
+
+下载链接：http://www.busybox.net/downloads/busybox-1.18.3.tar.bz2
+
+解压源代码：
+
+#tar -jxvf  busybox-1.18.3.tar.bz2
+
+修改Makefile中的交叉链和系统架构：
+
+CROSS_COMPILE ?=arm-linux-
+
+ARCH ?=arm
+
+配置编译选项：
+
+如果修改了Makefile则使用如下命令
+
+#make  menuconfig
+
+如果未修改Makefile则使用如下命令：
+
+# make ARCH＝arm CROSS_COMPILE=arm-linux- menuconfig
+
+ [A]指定安装位置：
+
+Busybox Settings  --->
+
+Installation Options ("make install" behavior)  --->
+
+BusyBox installation prefix-->
+
+输入：../rootfs //实际中，要根据计划的文件系统根设定！
+
+[B]指定mdev动态文件系统
+
+Linux System Utilities --->
+
+[*]Support /etc/mdev.conf
+
+[*]Support command execution at device addition/removal
+
+说明：在busybox中配置对dev下设备类型的支持dev的创建有三种方法：  （1）手动创建：在制作根文件系统的时候，就在 dev目录下创建好要使用的设备文件，系统 挂接根文件系统后，就可以使用 dev目录下的设备文件了。   （2）使用 devfs 文件系统：这种方法已经过时，具有不确定的设备映射、没有足够的主/次设备号、devfs 消耗大量的内存。   （3）udev： 它是个用户程序，（u是指user space ,dev 是指device）能根据系统中硬件设备的状态动态的更新设备文件，包括设备文件的创建、删除等。使用udev机制也不需要/dev目录下创建设备节点， 它需要一些用户程序的支持，并且内核要支持sysfs文件系统。它的操作相对复杂，但灵活性很高 。mdev 是 busybox 自带的一个简化版的 udev，适合于嵌入式的应用埸合。其具有使用简单的特点。它的作用，就是在系统启动和热插拔或动态加载驱动程序时，自动产生驱动程序所需的节点文件。在以busybox 为基础构建嵌入式linux 的根文件系统时，使用它是最优的选择。配置时需要增加对 mdev的支持。 
+
+ 
+
+4、编译busybox   # make ARCH＝arm CROSS_COMPILE=arm-linux-  install   在 rootfs 目录下会生成目录 bin、sbin、usr 和文件 linuxrc 的内容。 5、 建立etc目录  init进程根据/etc/inittab文件来创建其他的子进程，比如调用脚本文件配置IP地址，挂载其他的文件系统，最后启动shell等。 （1）、拷贝主机 etc 目录下的passwd、group、shadow文件到 rootfs/etc目录下。 （2） etc/sysconfig目录下新建文件HOSTNAME，内容为”frank” 。   （3） etc/inittab文件：     仿照Busybox的examples/inittab文件，在etc/目录下创建一个inittab文件.
+
+ 
+
+#etc/inittab
+
+::sysinit:/etc/init.d/rcS
+
+::respawn:-/bin/sh
+
+::askfirst:-/bin/sh
+
+::ctrlaltdel:/bin/umount -a –r
+
+ 
+
+6、创建etc/init.d/rcS文件： 这是一个脚本文件，可以在里面添加自动执行的命令，
+
+#!/bin/sh PATH=/sbin:/bin:/usr/sbin:/usr/bin runlevel=S      //运行的级别 prevlevel=N umask 022   //文件夹的掩码 export PATH runlevel prevlevel mount -a     //挂载/etc/fstab/文件指定的所有的文件系统 echo /sbin/mdev>/proc/sys/kernel/hotplug mdev -s /bin/hostname -F /etc/sysconfig/HOSTNAME //主机的名字
+
+最后，还要改变它的属性，使它能够运行“
+
+sudo chmod 777 etc/init.d/rcS
+
+7、创建etc/fstab文件：    内容如下，表示执行完，“mount -a”命令后将挂载proc,tmpfs 等包含在该文件中的所有的文件系统。
+
+#device mount-point type option dump fsck order proc /proc proc defaults 0 0 tmpfs /tmp tmpfs defaults 0 0 none /tmp ramfs defaults 0 0 sysfs /sys sysfs defaults 0 0 mdev /dev ramfs defaults 0 0
+
+/etc/fstab/文件被用来定义文件系统的“静态信息”，这些信息被用来控制mount命令的行为，各个字段的含义以如下： device: 要挂载的设备    比如/dev/hda2 /dev/mtdblock1 等设备文件，也可以是其他格式的，比如对于proc文件系统这个字段就没有意义，可以就任意的值，对于NFS文件系统，这个字段是,<host>:<dir>. mount-point: 挂载点 type 文件系统类型：    比如 proc,jffs2,yaffs,ext2 ,nfs等，也可以是auto，表示自动检测文件系统类型 options: 挂接参数，以逗号隔开 /etc /fstab的作用不仅仅是用来控制'mount -a'的行为，即使是一般的mount命令，也受它的控制，常用的取值还有 auto noauto user 只允许普通用户挂载设备 nouser exec 允许运行所挂载设备上的程序 noexec Ro 只读方式 rw 以读写的方式 sync 修改文件是，它会同步写入设备中 async 不同步   defaults rw suid dev exec auto nouser async 等的组合。   dump 和fsck order:用来控制dump fsck程序的行为 dump是一个用来备份的文件的程序，fsck是一个用来检查磁盘的程序， 8、 创建etc/profile文件：
+
+#Ash profile #vim:syntax=sh #No core file by defaults #ulimit -S -c 0>/dev/null 2>&1 USER="id -un" LOGNAME=$USER PS1='[\u@\h=W]#' PATH=$PATH HOSTNAME='/bin/hostname' export USER LOGNAME PS1 PATH
+
+9、 制作根文件系统映像文件
+
+我的目标板NandFlash是64MB的，所以要使用mkyaffs2image的64M版本这个可执行的文件生成映像文件。使用命令mkyaffs2image rootfs rootfs.img生成根文件系统映像文件。把生成的rootsfs.img文件烧写到nandFlash中的根文件系统区。重新引导操作系统即可实现文件系统的正确挂载。
+
+ 
+
+4、移植过程中遇到的问题及处理：
+
+如果出现“Kernel panic - not syncing: Attempted to kill init!”错误，请在编译内核时选择EABI支持。
+
+Kernel Features  --->
+
+[*] Use the ARM EABI to compile the kernel                 
+
+[*]   Allow old ABI binaries to run with this kernel (EXPERIMENTA)
+
+把这个选上重新编译就可以了，如果文件系统镜像也是新做的则也要考虑文件系统本身有问题的可能性。此外请注意mkyaffs2image 工具是否正确，我使用友善之臂的工具就出现此错误，但是使用天嵌提供的工具则可以正常使用。
+
+如果出现“Failed_to_execute_/linuxrc”可以根据下面的建议逐个检查。 1. bin/busybox文件是可以执行的。 2. 在配置busybox的时候要选中shell选项中的一个选项 3. linuxrc 是可执行的。 4. 制作文件系统的时候利用的工具也要留意区分：     mkcramfs          制作cramfs镜像的工具     mkimage          制作jffs2镜像的工具     mkyaffs2image      制作2.6的yaffs2的镜像工具（针对Nand Flash是128MB到1GB的）     mkyaffsimage       制作2.6.13的yaffs2的镜像工具     mkyaffsimage_2       制作2.6.25.8或2.6.30.4或更高版本内核的yaffs2的镜像工具（针对Nand Flash是  64MB的）
+
+5、配置内核时是否取消ECC（我遇到此问题是通过取消ECC解决此问题。）
+
+NAND Flash support for Samsung S3C SoCs
+
+   □Samsung S3C NAND Hardware ECC
+
+ 
+
+为了让U-boot支持内核引导，需要涉及u-boot和linux内核的配合，u-boot传递启动参数给linux内核。其中以machine ID最为重要，是内核能够正确引导的先决条件。其他参数则通过gd->bd数据结构传递给内核。
+
+1、u-boot的配置和修改
+
+首先需要在include\configs\smdk2440.h中加入以下宏定义：
+
+#define CONFIG_SETUP_MEMORY_TAGS    1 //如果没有定义这个参数，则uboot参数必须加入men=内存大小
+
+#define CONFIG_INITRD_TAG            1
+
+#define CONFIG_CMDLINE_TAG           1 //设置bootargs出入内核必须
+
+#define CONFIG_BOOTARGS         "root=/dev/mtdblock3 rw rootfstype=yaffs noinitrd init=/linuxrc console=ttySAC0,115200 ip=192.168.0.105:192.168.0.7:192.168.0.1:255.255.255.0:comleader:eth0:off"
+
+#define CONFIG_BOOTCOMMAND  "nand read 0x30008000 0x50000 0x200000;bootm 0x30008000"
+
+#define CONFIG_MTD_NAND_YAFFS2   1 //定义一个管理对Yaffs2支持的宏
+
+//开启Nand Flash默认分区，注意此处的分区要和你的内核中的分区保持一致
+
+#define MTDIDS_DEFAULT "nand0=nandflash0"
+
+#define MTDPARTS_DEFAULT "mtdparts=nandflash0:192k(bootloader)," \
+
+                     "64k(params)," \
+
+                     "2m(kernel)," \
+
+                     "-(root)"
+
+ 
+
+修改board\samsung\smdk2440\smdk2440.c中的machine id：
+
+gd->bd->bi_arch_number = MACH_TYPE_SMDK2440; /*1008*/
+
+ 
+
+然后编译，发现有错误，有未定义函数，这又是新版本的一个BUG，在arch\arm\lib\bootm.c文件中增加头文件：
+
+#include <lmb.h>   /*add by bsc*/
+
+编译之后运行，下载uImage到0x30008000地址，然后用GO命令直接运行：
+
+Tftp 0x30008000 uImage
+
+Go 0x30008040
+
+出现错误“Error: unrecognized/unsupported machine ID (r1 = 0x338afef0).”
+
+此时r1 = 0x338afef0，实际上R1中应该存有uboot传递给linux内核的machine ID 但是此时显然不是。这是因为go命令并未传递任何参数。因此我们通过bootm命令来引导：
+
+tftp 0x30008000 uImage
+
+bootm 0x30008000
+
+ 
+
+但是仍然在“Starting kernel ..”地方死机。找到到此处位置在arch\arm\lib\bootm.c中：
+
+static void announce_and_cleanup(void)
+
+{
+
+      printf("\nStarting kernel ...\n\n");
+
+ 
+
+#ifdef CONFIG_USB_DEVICE
+
+      {
+
+           extern void udc_disconnect(void);
+
+           udc_disconnect();
+
+      }
+
+#endif
+
+      cleanup_before_linux();
+
+}
+
+怀疑cleanup_before_linux()函数有问题，以前的版本没有此函数，因此暂时注销此函数：
+
+static void announce_and_cleanup(void)
+
+{
+
+      printf("\nStarting kernel ...\n\n");
+
+ 
+
+#ifdef CONFIG_USB_DEVICE
+
+      {
+
+           extern void udc_disconnect(void);
+
+           udc_disconnect();
+
+      }
+
+#endif
+
+      //cleanup_before_linux();/*delete by bsc */
+
+}
+
+重新编译，更新uboot之后再次引导内核，引导成功。此时的内核尚没有文件系统支持。cleanup_before_linux()函数的问题后续进一步研究。
+
+然后，我们将内核烧写入NAND FLASH 然后让系统自动引导。我们可以在common\env_common.c文件中的default_environment[]数组中增加：
+
+   "kk="   "t 0x30000000 zImage;nand erase 0x50000 0x300000;nand write 0x30000000 0x50000 0x200000" "\0"
+
+   "yy="   "t 0x30000000 rootyaffs2.img;nand erase 0x250000 0x3db0000;nand write.yaffs2 0x30000000 0x250000 $(filesize)" "\0"
+
+   "firstboot=" "set bootcmd $(normalboot);save;nand erase 0x50000 0x3f00000;run kk;run yy" "\0"
+
+   "normalboot="   "nand read 0x30008000 0x50000 0x200000;bootm 0x30008000" "\0"
+
+然后我们只需用run kk命令即可实现内核的下载和烧写。重启之后通过bootm 0x30008000来实现引导。
+
+2、制作u-boot能够直接引导的linux内核。
+
+首先linux启动过程中需要校验machine ID，因此我们修改修改linux内核的文件arch\arm\tools\mach-types中：
+
+s3c2440      ARCH_S3C2440    S3C2440       1008 //1008,与uboot中一致
+
+说明：不建议直接修改arch/arm/kernel/head.S文件通过R1寄存器直接传递machine ID给内核。
+
+U-boot并不能直接支持linux的zImage，u-boot支持的镜像文件格式为uImage。通 常，kernel的启动需要u-boot提供一些参数信息，比如ramdisk在RAM中的地址。经过编译后的u-boot在根目录下的tools目录 中，会有个叫做mkimage的工具，他可以给zImage添加一个header，也就是说使得通常我们编译的内核zImage添加一个数据头信息部分，我们把添加头后的image通常叫uImage，uImage是可以被u-boot直接引导的内核镜像。
+
+mkimage工具的使用：中括号括起来的是可选的
+
+mkimage [-x] -A arch -O os -T type -C comp -a addr -e ep -n name -d data_file[:data_file...] image
+
+选项： -A：set architecture to 'arch'    //用于指定CPU类型，比如ARM -O：set operating system to 'os'     //用于指定操作系统，比如Linux -T：set image type to 'type'     //用于指定image类型，比如Kernel -C：set compression type 'comp'      //指定压缩类型 -a：set load address to 'addr' (hex) //指定image的载入地址 -e：set entry point to 'ep' (hex)    //内核的入口地址，一般为image的载入地址+0x40（信息头的大小） -n：set image name to 'name'     //image在头结构中的命名 -d：use image data from 'datafile'   //无头信息的image文件名 -x：set XIP (execute in place)     //设置执行位置
+
+先将u- boot下的tools中的mkimage复制到主机的/usr/local/bin目录下，这样就可以在主机的任何目录下使用该工具了。现在我们进入 kernel生成目录(一般是arch/arm/boot目录)，然后执行如下命令，就会在该目录下生成一个uImage.img的镜像文件，把他复制到 tftp目录下，这就是我们所说的uImage。
+
+mkimage -n 'linux-2.6.37.1' -A arm -O linux -T kernel -C none -a 0x30008000 -e 0x30008000 -d zImage uImage
+
+ 
+
+设置修改u-boot的启动参数，在u-boot命令行下输入：
+
+//设置启动参数，意思是将nand中0x50000-0x00200000(和kernel分区一致)的内容读到内存0x30008000中，然后用bootm命令来执行：
+
+set bootcmd 'nand read 0x30008000 0x50000 0x00200000;bootm 0x30008000'
+
+saveenv  //保存设置
+
+把uImage用tftp下载到内存中，然后再固化到Nand Flash中，操作如下：
+
+tftp 0x30000000 uImage  //将uImage.img下载到内存0x30000000处
+nand erase 0x50000 0x200000 //擦除nand的0x50000-0x200000的内容
+nand write 0x30000000 0x50000 0x200000 //将内存0x30000000处的内容写入到nand的0x50000处
+
+最后，我们重新启动开发板，可以看到，内核被u-boot成功引导起来了。
+
+说明：linux最新版本的交叉编译过程参见另外的文章。
