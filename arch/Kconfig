@@ -6,7 +6,7 @@ config HAVE_ARCH_IOREMAP
 
 choice
 	prompt "Architecture select"
-	default SANDBOX
+	default ARM
 
 config ARC
 	bool "ARC architecture"

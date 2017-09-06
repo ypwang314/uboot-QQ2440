@@ -128,7 +128,7 @@ config ENABLE_ARM_SOC_BOOT0_HOOK
 
 choice
 	prompt "Target select"
-	default TARGET_HIKEY
+	default TARGET_QQ2440
 
 config ARCH_AT91
 	bool "Atmel AT91"

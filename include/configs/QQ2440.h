@@ -19,7 +19,7 @@
  */
 #define CONFIG_S3C24X0		/* This is a SAMSUNG S3C24x0-type SoC */
 #define CONFIG_S3C2440		/* specifically a SAMSUNG S3C2410 SoC */
-#define CONFIG_QQ2440		/* on a SAMSUNG SMDK2410 Board */
+#define CONFIG_QQ2440		/* on a SAMSUNG SMDK2440 Board */
 
 #define CONFIG_SYS_TEXT_BASE	0x0
 
@@ -124,6 +124,7 @@
 /*-----------------------------------------------------------------------
  * FLASH and environment organization
  */
+#define CONFIG_SYS_CFI_FLASH_CONFIG_REGS    {0xFFFF}
 
 #define CONFIG_SYS_FLASH_CFI
 #define CONFIG_FLASH_CFI_DRIVER
@@ -133,7 +134,7 @@
 
 #define CONFIG_SYS_MAX_FLASH_BANKS	1
 #define CONFIG_SYS_FLASH_BANKS_LIST     { CONFIG_SYS_FLASH_BASE }
-#define CONFIG_SYS_MAX_FLASH_SECT	(19)
+#define CONFIG_SYS_MAX_FLASH_SECT	(35)    //
 
 #define CONFIG_ENV_ADDR			(CONFIG_SYS_FLASH_BASE + 0x070000)
 #define CONFIG_ENV_IS_IN_FLASH
@@ -154,8 +155,8 @@
  * NAND configuration
  */
 #ifdef CONFIG_CMD_NAND
-#define CONFIG_NAND_QQ2440
-#define CONFIG_SYS_QQ2440_NAND_HWECC
+#define CONFIG_NAND_S3C2440
+#define CONFIG_SYS_S3C2440_NAND_HWECC
 #define CONFIG_SYS_MAX_NAND_DEVICE	1
 #define CONFIG_SYS_NAND_BASE		0x4E000000
 #endif

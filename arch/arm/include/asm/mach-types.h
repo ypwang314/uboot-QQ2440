@@ -346,7 +346,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_SNAPPER_9260         1987
 #define MACH_TYPE_DSM320               1988
 #define MACH_TYPE_EXEDA                1994
-#define MACH_TYPE_MINI2440             1999
+//#define MACH_TYPE_MINI2440             1999
 #define MACH_TYPE_COLIBRI300           2000
 #define MACH_TYPE_LINKSTATION_LS_HGL   2005
 #define MACH_TYPE_CPUAT9G20            2031
