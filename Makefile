@@ -8,8 +8,8 @@ SUBLEVEL =
 EXTRAVERSION =
 NAME =
 
-#ARCH=arm
-#CROSS_COMPILE=arm-linux-gnueabihf-
+ARCH=arm
+CROSS_COMPILE=arm-linux-gnueabihf-
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"

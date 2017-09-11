@@ -169,6 +169,10 @@ extern flash_info_t *flash_get_info(ulong base);
 /* Manufacturers inside bank 1 have ids like 0x01xx01xx */
 #define EON_MANUFACT	0x011C011C	/* EON     manuf. ID in D23..D16, D7..D0 */
 
+/* EON */
+#define EN29LV040A  0x004F
+#define EN29LV160B  0x2249
+
 /* Manufacturers inside bank 2 have ids like 0x02xx02xx */
 
 					/* Micron Technologies (INTEL compat.)	*/

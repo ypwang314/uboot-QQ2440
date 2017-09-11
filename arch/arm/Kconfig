@@ -144,6 +144,9 @@ config TARGET_VCMA9
 config TARGET_QQ2440
     bool "Support QQ2440"
     select CPU_ARM920T
+    select CONFIG_NAND_S3C2440
+    select CONFIG_QQ2440
+    select CONFIG_SYS_S3C2440_NAND_HWECC
 
 config TARGET_SMDK2410
 	bool "Support smdk2410"

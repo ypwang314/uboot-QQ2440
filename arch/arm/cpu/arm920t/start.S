@@ -53,16 +53,18 @@ copyex:
 #ifdef CONFIG_S3C24X0
 	/* turn off the watchdog */
 
-# if defined(CONFIG_S3C2400)
-#  define pWTCON	0x15300000
-#  define INTMSK	0x14400008	/* Interrupt-Controller base addresses */
-#  define CLKDIVN	0x14800014	/* clock divisor register */
-#else
-#  define pWTCON	0x53000000
-#  define INTMSK	0x4A000008	/* Interrupt-Controller base addresses */
-#  define INTSUBMSK	0x4A00001C
-#  define CLKDIVN	0x4C000014	/* clock divisor register */
-# endif
+    # if defined(CONFIG_S3C2400)
+        #  define pWTCON	0x15300000
+        #  define INTMSK	0x14400008	/* Interrupt-Controller base addresses */
+        #  define CLKDIVN	0x14800014	/* clock divisor register */
+    #else
+        #  define pWTCON	0x53000000
+        #  define INTMSK	0x4A000008	/* Interrupt-Controller base addresses */
+        #  define INTSUBMSK	0x4A00001C
+        #  define CLKDIVN	0x4C000014	/* clock divisor register */
+    # endif
+
+#endif
 
 	ldr	r0, =pWTCON
 	mov	r1, #0x0
@@ -86,18 +88,58 @@ copyex:
 	str	r1, [r0]
 # endif
 
+# if defined(CONFIG_S3C2410)
 	/* FCLK:HCLK:PCLK = 1:2:4 */
 	/* default FCLK is 120 MHz ! */
 	ldr	r0, =CLKDIVN
-
-# if defined(CONFIG_S3C2440)
-    mov      r1, #5
-# else
 	mov	r1, #3
-# endif
-
 	str	r1, [r0]
 #endif	/* CONFIG_S3C24X0 */
+
+/* Initialize Clock */
+# if defined(CONFIG_S3C2440)
+    #define MPLLCON 0x4C000004
+    #define UPLLCON 0x4C000008
+
+    #define S3C2440_MPLL_400M ((92 << 12) | (1 << 4) | (1))
+    #define S3C2440_UPLL_48M  ((56 << 12) | (2 << 4) | (2))         
+
+    /* FCLK:HCLK:PCLK = 1:4:8 */
+    ldr     r0, =CLKDIVN
+    mov     r1, #5
+    str     r1, [r0]
+
+    /* MMU Set Async Bus Mode */
+    mrc     p15, 0, r0, c1, c0, 0
+    orr     r0, r0, #0xC0000000
+    mcr     p15, 0, r0, c1, c0, 0
+
+    /* Set PLL */
+    ldr     r0, =MPLLCON
+    ldr     r1, =S3C2440_MPLL_400M
+    str     r1, [r0]
+
+    /* Some delay between MPLL and UPLL */
+    mov     r0, #(1 << 13)
+    mov     r1, #0
+1:
+    subs    r0, r0, #1
+    cmp     r0, r1
+    bne     1b
+
+    ldr     r0, =UPLLCON
+    ldr     r1, =S3C2440_UPLL_48M
+    str     r1, [r0]
+
+    /* Some delay */
+    mov     r0, #(1 << 14)
+    mov     r1, #0
+2:
+    subs    r0, r0, #1
+    cmp     r0, r1
+    bne     2b
+
+# endif
 
 	/*
 	 * we do sys-critical inits only at reboot,
